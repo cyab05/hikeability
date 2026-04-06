@@ -14,12 +14,9 @@ class WTATripReportScraper:
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.5',
         })
-        # We can simplify the base URL now
         self.base_url = "https://www.wta.org"
 
     def get_report_links(self, start_index=0):
-        # THE FIX: Use the exact endpoint revealed in the pagination links
-        # Note the b_size=50 parameter. This means your script should increment start_index by 50 for each page!
         search_url = f"{self.base_url}/@@search_tripreport_listing?b_size=50&b_start:int={start_index}"
         print(f"Fetching search results page: {search_url}")
         
@@ -39,23 +36,18 @@ class WTATripReportScraper:
 
             report_links = []
             
-            # Now that we are hitting the correct listing endpoint, our original selector will work perfectly
             link_tags = soup.select('.listitem-title a')
 
             if not link_tags:
                  print("  -> ERROR: Could not find the trip report links.")
-                 # Print the text to see what we actually got back
-                 print(f"  -> HTML Snippet:\n{soup.text[:1000]}")
                  return []
 
             for a_tag in link_tags:
                 link = a_tag.get('href')
                 if link:
-                    # Make sure it's an absolute URL
                     if link.startswith('/'):
                         link = f"https://www.wta.org{link}"
                     
-                    # Ensure we are only grabbing actual trip reports
                     if "trip_report" in link and link not in report_links:
                         report_links.append(link)
                     
@@ -91,9 +83,8 @@ class WTATripReportScraper:
         if title_tag:
             raw_title = title_tag.get_text(strip=True)
             
-            # Extract date from the end of the title using the em dash
+            # Extract date from the end of title
             if '—' in raw_title:
-                # rsplit with maxsplit=1 safely handles any other dashes in the hike names
                 title_parts = raw_title.rsplit('—', 1) 
                 report_data['title'] = title_parts[0].strip()
                 report_data['date_hiked'] = title_parts[1].strip()

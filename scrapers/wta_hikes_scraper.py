@@ -8,9 +8,7 @@ import re
 
 class WTAScraper:
     def __init__(self):
-        # Using a session speeds up multiple requests to the same domain
         self.session = requests.Session()
-        # Add a realistic User-Agent so the site doesn't block the request
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
         })
@@ -27,7 +25,6 @@ class WTAScraper:
 
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # DEBUG: Check if we hit a bot-protection wall
         page_title = soup.title.get_text(strip=True) if soup.title else 'No title'
         print(f"  -> Page Title detected: '{page_title}'")
         if "Just a moment" in page_title or "Cloudflare" in page_title:
@@ -36,8 +33,6 @@ class WTAScraper:
 
         hike_links = []
         
-        # Broaden the search: look for any links inside the search result containers
-        # Previous versions of WTA used '.search-result-item', let's target that.
         result_items = soup.select('.search-result-item')
         
         if not result_items:
@@ -157,17 +152,14 @@ class WTAScraper:
                 all_links = all_links[:max_hikes]
                 break
                 
-            time.sleep(1) # Be polite when paginating search results
+            time.sleep(1) # polite scraping
             
         print(f"\nFound {len(all_links)} links. Starting parallel scrape with {max_workers} workers...\n")
 
-        # Step 2: Scrape the details in parallel
-        # The ThreadPoolExecutor manages a pool of worker threads.
+        # Scrape the details in parallel
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # This creates a dictionary mapping the future (the background task) to the URL
             future_to_url = {executor.submit(self._parallel_scrape_wrapper, url): url for url in all_links}
             
-            # as_completed yields the tasks as soon as they finish, in whatever order that happens
             for future in concurrent.futures.as_completed(future_to_url):
                 url = future_to_url[future]
                 try:
