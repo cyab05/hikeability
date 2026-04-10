@@ -1,0 +1,29 @@
+name: Daily WTA Scraper
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  
+  workflow_dispatch:       
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up GCP credentials
+        run: |
+          echo '${{ secrets.GCP_SA_KEY }}' > /tmp/sa_key.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa_key.json" >> $GITHUB_ENV
+
+      - name: Build Docker image
+        run: docker build -t wta-scraper .
+
+      - name: Run scraper
+        run: |
+          docker run \
+            -e GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa_key.json \
+            -v /tmp/sa_key.json:/tmp/sa_key.json \
+            wta-scraper
