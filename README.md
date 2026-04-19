@@ -4,6 +4,14 @@ USF ML Ops project: a website that allows you to search for hikes based on their
 
 ## Setup
 
+### Create Conda Environment
+```bash
+conda env create -f environment.yml
+conda activate hikeability
+gcloud auth application-default login
+```
+
+### Or venv
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
