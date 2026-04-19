@@ -1,5 +1,7 @@
 import json
 import pytest
+import sys
+sys.path.insert(0, ".")
 from classification.gcs_utils import parse_report_date
 from classification.weather import format_weather_context
 from classification.classifier import (
@@ -10,8 +12,8 @@ from classification.classifier import (
 from classification.run_classification import (
     load_progress,
     save_progress,
-    PROGRESS_FILE,
 )
+
 
 def test_build_input_text_fields():
     report = {
