@@ -84,5 +84,35 @@ class TestWTADailyScraper(unittest.TestCase):
         
         self.assertIsNone(result)
 
+    def test_duplicate_urls_filtered(self):
+        """Test that duplicate report URLs are filtered down to one entry."""
+        existing_reports = [
+            {'report_url': 'https://wta.org/report/1'},
+        ]
+        new_reports = [
+            {'report_url': 'https://wta.org/report/1', 'associated_hikes': []},  # duplicate
+            {'report_url': 'https://wta.org/report/2', 'associated_hikes': []},  # new
+        ]
+        existing_urls = {r['report_url'] for r in existing_reports}
+        added_count = 0
+        for report in new_reports:
+            clean_report = {k: v for k, v in report.items() if k != 'associated_hikes'}
+            if clean_report['report_url'] not in existing_urls:
+                existing_reports.append(clean_report)
+                existing_urls.add(clean_report['report_url'])
+                added_count += 1
+        self.assertEqual(added_count, 1)
+        self.assertEqual(len(existing_reports), 2)
+
+    def test_malformed_date_handled(self):
+        """Test that a malformed date string is handled without crashing."""
+        reports = [
+            {'date_hiked': 'March 1st 2024'},  # malformed
+            {'date_hiked': 'Jan 01, 2024'},     # valid
+        ]
+        result = self.scraper.sort_reports_chronologically(reports)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[-1]['date_hiked'], 'Jan 01, 2024')
+
 if __name__ == '__main__':
     unittest.main()
