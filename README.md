@@ -23,6 +23,14 @@ gcloud auth application-default login
 
 To run a specific test file:
 
+### Conda
+```bash
+pytest tests/test_classification.py
+pytest tests/test_weather_forecasts.py
+pytest tests/test_wta_scrapers.py
+```
+
+### venv
 ```bash
 .venv/bin/python -m pytest tests/test_classification.py
 .venv/bin/python -m pytest tests/test_weather_forecasts.py
