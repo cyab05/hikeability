@@ -160,12 +160,14 @@ def forecast_payload(
         "forecast_hours": 24,
         "weather_hourly_units": df.attrs.get("weather_units", {}),
         "air_quality_hourly_units": df.attrs.get("air_quality_units", {}),
+        "daily_units": df.attrs.get("daily_units", {}),
         "trail_metadata_excerpt": {
             k: metadata.get(k)
             for k in ("latitude", "longitude", "name", "title", "id", "url")
             if k in metadata
         },
         "hourly_forecast": records,
+        "daily_summary": df.attrs.get("daily", {}),
         "integration": {
             "weather_api": omf.FORECAST_URL,
             "air_quality_api": omf.AIR_QUALITY_URL,

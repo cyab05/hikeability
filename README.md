@@ -34,4 +34,5 @@ pytest tests/test_wta_scrapers.py
 ```bash
 .venv/bin/python -m pytest tests/test_classification.py
 .venv/bin/python -m pytest tests/test_weather_forecasts.py
+.venv/bin/python -m pytest tests/test_wta_scrapers.py
 ```

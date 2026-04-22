@@ -26,6 +26,7 @@ FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 AIR_QUALITY_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
 
 WEATHER_VARS = "apparent_temperature,snowfall,snow_depth"
+DAILY_VARS = "precipitation_probability_max,wind_gusts_10m_max,weather_code"
 AIR_VARS = "us_aqi"
 
 TIMEZONE = "America/Los_Angeles"
@@ -38,7 +39,7 @@ def _get_json(url: str, params: dict[str, Any]) -> dict[str, Any]:
     with urllib.request.urlopen(req, timeout=60) as resp:
         return json.loads(resp.read().decode())
 
-# grabs the weather data
+# grabs the weather data (hourly for next 24h + today's daily summary variables)
 def fetch_weather(latitude: float, longitude: float) -> dict[str, Any]:
     return _get_json(
         FORECAST_URL,
@@ -48,7 +49,9 @@ def fetch_weather(latitude: float, longitude: float) -> dict[str, Any]:
             "timezone": TIMEZONE,
             "current": WEATHER_VARS,
             "hourly": WEATHER_VARS,
+            "daily": DAILY_VARS,
             "forecast_hours": 24,
+            "forecast_days": 1,
         },
     )
 
@@ -76,8 +79,10 @@ def fetch_open_meteo(
     weather and air quality APIs. Timezone is always America/Los_Angeles.
     Fires fetch_weather and fetch_air_quality in parallel.
 
-    Columns: time, apparent_temperature, snowfall, snow_depth,
-             us_aqi.
+    Columns: time, apparent_temperature, snowfall, snow_depth, us_aqi.
+
+    ``df.attrs['daily']`` holds today's single-day summary:
+    precipitation_probability_max, wind_gusts_10m_max, weather_code.
     """
     def _run() -> tuple[dict[str, Any], dict[str, Any]]:
         with ThreadPoolExecutor(max_workers=2) as ex:
@@ -107,9 +112,18 @@ def fetch_open_meteo(
         "us_aqi":               hourly_a.get("us_aqi"),
     })
 
+    # today's daily summary (one value per variable)
+    daily = weather.get("daily", {}) or {}
+    daily_summary: dict[str, Any] = {}
+    for key in ("time", "precipitation_probability_max", "wind_gusts_10m_max", "weather_code"):
+        values = daily.get(key)
+        daily_summary[key] = values[0] if isinstance(values, list) and values else None
+
     # add units as DataFrame attrs for reference
     df.attrs["weather_units"]     = weather.get("hourly_units", {})
     df.attrs["air_quality_units"] = air.get("hourly_units", {})
+    df.attrs["daily"]             = daily_summary
+    df.attrs["daily_units"]       = weather.get("daily_units", {})
     df.attrs["timezone"]          = TIMEZONE
 
     return df
@@ -133,6 +147,11 @@ def main() -> None:
         sys.exit(1)
 
     print(df.to_string(index=False))
+    print()
+    print("Daily summary (today):")
+    for k, v in df.attrs.get("daily", {}).items():
+        unit = df.attrs.get("daily_units", {}).get(k, "")
+        print(f"  {k}: {v} {unit}".rstrip())
 
 
 if __name__ == "__main__":

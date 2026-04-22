@@ -29,6 +29,12 @@ def test_open_meteo_smoke():
     assert list(df.columns) == [
         "time", "apparent_temperature", "snowfall", "snow_depth", "us_aqi",] # make sure df has right columns
     assert df.attrs["timezone"] == omf.TIMEZONE # ensure correct timezone
+    
+    daily = df.attrs.get("daily", {})
+    for key in ("precipitation_probability_max", "wind_gusts_10m_max", "weather_code"):
+        assert key in daily
+
+
 
 # end-to-end read/write from GCS 
 def test_gcs_forecast_roundtrip_optional():
