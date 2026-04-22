@@ -50,6 +50,7 @@ def fetch_weather(latitude: float, longitude: float) -> dict[str, Any]:
             "current": WEATHER_VARS,
             "hourly": WEATHER_VARS,
             "daily": DAILY_VARS,
+            "temperature_unit": "fahrenheit",
             "forecast_hours": 24,
             "forecast_days": 1,
         },
