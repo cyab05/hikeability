@@ -23,6 +23,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Write GCP credentials
+        shell: bash
+        run: |
+          printf '%s' '${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}' > "$RUNNER_TEMP/gcp-key.json"
+
       - name: Run all tests
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/gcp-key.json
         run: |
           pytest tests/
