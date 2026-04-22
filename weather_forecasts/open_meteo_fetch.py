@@ -14,13 +14,14 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import urllib.error
-import urllib.parse
-import urllib.request
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
+from urllib.parse import urlsplit
 
 import pandas as pd
+import urllib3
 
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 AIR_QUALITY_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
@@ -31,13 +32,70 @@ AIR_VARS = "us_aqi"
 
 TIMEZONE = "America/Los_Angeles"
 
+# open-meteo's allows around 600 requests/min (~10/sec) per endpoint
+# cap slightly below for headroom
+DEFAULT_MAX_REQ_PER_SEC = 8.0
+
+
+class _RateLimiter:
+    """Thread-safe token-bucket style limiter. Blocks until a slot is available."""
+
+    def __init__(self, max_per_sec: float) -> None:
+        self._min_interval = 1.0 / max_per_sec if max_per_sec > 0 else 0.0
+        self._lock = threading.Lock()
+        self._next_at = 0.0
+
+    def acquire(self) -> None:
+        if self._min_interval <= 0:
+            return
+        with self._lock:
+            now = time.monotonic()
+            slot = max(self._next_at, now)
+            self._next_at = slot + self._min_interval
+        delay = slot - time.monotonic()
+        if delay > 0:
+            time.sleep(delay)
+
+
+# one limiter per host, since weather and air-quality are separate endpoints
+# with independent quotas on open-meteo's side.
+_LIMITERS: dict[str, _RateLimiter] = {
+    urlsplit(FORECAST_URL).netloc: _RateLimiter(DEFAULT_MAX_REQ_PER_SEC),
+    urlsplit(AIR_QUALITY_URL).netloc: _RateLimiter(DEFAULT_MAX_REQ_PER_SEC),
+}
+
+
+def set_rate_limit(max_per_sec: float) -> None:
+    """Override the per-endpoint requests/sec cap (affects future calls)."""
+    for host in _LIMITERS:
+        _LIMITERS[host] = _RateLimiter(max_per_sec)
+
+
+# shared connection pool. thread-safe, reuses TCP+TLS across calls so we don't
+# pay the ~100ms handshake cost per request. longer backoff handles stray 429s.
+_HTTP = urllib3.PoolManager(
+    num_pools=4,
+    maxsize=50,
+    retries=urllib3.Retry(
+        total=4,
+        backoff_factor=0.8,
+        status_forcelist=(429, 500, 502, 503, 504),
+        respect_retry_after_header=True,
+    ),
+    headers={"User-Agent": "open-meteo-fetch/1.0"},
+)
+
+
 # builds the url, makes the request, and returns the json response
 # only place that actually touches the network
 def _get_json(url: str, params: dict[str, Any]) -> dict[str, Any]:
-    q = urllib.parse.urlencode(params)
-    req = urllib.request.Request(f"{url}?{q}", headers={"User-Agent": "open-meteo-fetch/1.0"})
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        return json.loads(resp.read().decode())
+    limiter = _LIMITERS.get(urlsplit(url).netloc)
+    if limiter is not None:
+        limiter.acquire()
+    resp = _HTTP.request("GET", url, fields=params, timeout=60.0)
+    if resp.status >= 400:
+        raise RuntimeError(f"HTTP {resp.status}: {resp.data[:500].decode(errors='replace')}")
+    return json.loads(resp.data.decode())
 
 # grabs the weather data (hourly for next 24h + today's daily summary variables)
 def fetch_weather(latitude: float, longitude: float) -> dict[str, Any]:
@@ -92,11 +150,8 @@ def fetch_open_meteo(
             try:
                 weather = f_w.result()
                 air = f_a.result()
-            except urllib.error.HTTPError as e:
-                body = e.read().decode(errors="replace")
-                raise RuntimeError(f"HTTP {e.code}: {body}") from e
-            except urllib.error.URLError as e:
-                raise RuntimeError(str(e.reason)) from e
+            except urllib3.exceptions.HTTPError as e:
+                raise RuntimeError(f"open-meteo network error: {e}") from e
         return weather, air
 
     weather, air = _run()

@@ -18,7 +18,7 @@ gcloud auth application-default login
 ## Run it
 
 ```bash
-python weather_forecasts/trail_forecasts_gcs.py --workers 20
+python weather_forecasts/trail_forecasts_gcs.py
 ```
 
 # Testing

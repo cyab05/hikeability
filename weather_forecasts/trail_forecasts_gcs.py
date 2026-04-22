@@ -35,7 +35,8 @@ HIKES_PREFIX = "output/hikes/"
 DEFAULT_DEST_BUCKET = "weather-conditions"
 DEFAULT_DEST_ROOT = "weather-scraped"
 DEFAULT_MAX_TRAILS: int | None = None
-DEFAULT_WORKERS = 20
+DEFAULT_WORKERS = 25
+DEFAULT_REQ_PER_SEC = 8.0
 USER_AGENT_NOTE = "trail_forecasts_gcs/1.0"
 
 
@@ -68,6 +69,16 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_WORKERS,
         metavar="N",
         help=f"Concurrent trail workers (default: {DEFAULT_WORKERS}).",
+    )
+    p.add_argument(
+        "--req-per-sec",
+        type=float,
+        default=DEFAULT_REQ_PER_SEC,
+        metavar="R",
+        help=(
+            f"Max Open-Meteo requests per second per endpoint "
+            f"(default: {DEFAULT_REQ_PER_SEC}; free tier allows ~10/s, keep headroom)."
+        ),
     )
     return p.parse_args()
 
@@ -139,7 +150,7 @@ def coords_from_metadata(metadata: dict[str, Any]) -> tuple[float, float]:
         return lat, lon
 
     raise KeyError(
-        "no coordinates found (tried latitude/longitude, lat/lon, nested location.*, coordinates[])",
+        "missing coordinates",
     )
 
 
@@ -207,7 +218,7 @@ def process_trail(
         metadata = load_metadata_json(src_bucket, blob_name)
         lat, lon = coords_from_metadata(metadata)
     except (KeyError, TypeError, ValueError) as e:
-        raise RuntimeError(f"bad metadata / coordinates ({e})") from e
+        raise RuntimeError(f"Bad metadata ({e})") from e
 
     try:
         df = omf.fetch_open_meteo(lat, lon)
@@ -232,6 +243,8 @@ def main() -> int:
     root = args.dest_root.strip("/")
     dest_prefix = f"{root}/{scrape_date}/"
 
+    omf.set_rate_limit(args.req_per_sec)
+
     try:
         client = gcs_client(args.credentials)
     except Exception as e:
@@ -248,14 +261,14 @@ def main() -> int:
         return 1
 
     if not pairs:
-        print("No metadata.json objects found under prefix.", file=sys.stderr)
+        print("No metadata.json files found", file=sys.stderr)
         return 1
 
     cap = "all" if args.max_trails is None else args.max_trails
     workers = max(1, args.workers)
     print(
-        f"Found {len(pairs)} trail(s) to process (cap={cap}, workers={workers}); "
-        f"dest gs://{args.dest_bucket}/{dest_prefix}",
+        f"Found {len(pairs)} trail(s) to process (cap={cap}, workers={workers}, "
+        f"req/s={args.req_per_sec}); dest gs://{args.dest_bucket}/{dest_prefix}",
     )
 
     errors = 0
