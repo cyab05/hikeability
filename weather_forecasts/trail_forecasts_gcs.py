@@ -37,6 +37,7 @@ DEFAULT_DEST_ROOT = "weather-scraped"
 DEFAULT_MAX_TRAILS: int | None = None
 DEFAULT_WORKERS = 25
 DEFAULT_REQ_PER_SEC = 8.0
+DEFAULT_MIN_SUCCESS_RATE = 0.80
 USER_AGENT_NOTE = "trail_forecasts_gcs/1.0"
 
 
@@ -80,7 +81,20 @@ def parse_args() -> argparse.Namespace:
             f"(default: {DEFAULT_REQ_PER_SEC}; free tier allows ~10/s, keep headroom)."
         ),
     )
-    return p.parse_args()
+    p.add_argument(
+        "--min-success-rate",
+        type=float,
+        default=DEFAULT_MIN_SUCCESS_RATE,
+        metavar="P",
+        help=(
+            "Minimum fraction of trails that must write successfully for the run "
+            f"to exit 0 (default: {DEFAULT_MIN_SUCCESS_RATE:.2f})."
+        ),
+    )
+    args = p.parse_args()
+    if not 0.0 <= args.min_success_rate <= 1.0:
+        p.error("--min-success-rate must be between 0.0 and 1.0")
+    return args
 
 
 def gcs_client(credentials_path: str | None) -> storage.Client:
@@ -237,6 +251,12 @@ def process_trail(
         raise RuntimeError(f"GCS write failed: {e}") from e
 
 
+def meets_success_threshold(ok_count: int, total_count: int, min_success_rate: float) -> bool:
+    if total_count <= 0:
+        return False
+    return (ok_count / total_count) >= min_success_rate
+
+
 def main() -> int:
     args = parse_args()
     scrape_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -301,7 +321,16 @@ def main() -> int:
         f"Summary: {n_ok} wrote successfully, {errors} skipped or failed "
         f"(out of {len(pairs)} trails listed).",
     )
-    if errors:
+    success_rate = n_ok / len(pairs)
+    print(
+        f"Success rate: {success_rate:.1%} "
+        f"(required: {args.min_success_rate:.1%}).",
+    )
+    if not meets_success_threshold(n_ok, len(pairs), args.min_success_rate):
+        print(
+            "error: scrape finished below the required success threshold",
+            file=sys.stderr,
+        )
         return 1
     return 0
 
