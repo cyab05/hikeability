@@ -7,7 +7,6 @@
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.css" rel="stylesheet">
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.js"></script>
     <style>
-        /* Modern, clean font settings */
         body { 
             margin: 0; 
             padding: 0; 
@@ -15,7 +14,6 @@
             background-color: #f8f9fa;
         }
 
-        /* The Top Header Bar */
         #header {
             position: absolute;
             top: 0;
@@ -45,7 +43,6 @@
             margin-top: 10px;
         }
 
-        /* The Map Container (pushed down so the header doesn't cover it) */
         #map { 
             position: absolute; 
             top: 80px; 
@@ -53,7 +50,6 @@
             width: 100%; 
         }
 
-        /* The Floating Legend */
         #legend {
             position: absolute;
             bottom: 30px;
@@ -87,6 +83,21 @@
             margin-right: 10px;
             border: 1px solid rgba(0,0,0,0.2);
         }
+
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+            z-index: 10;
+            font-family: Georgia, 'Times New Roman', Times, serif;
+            color: #373d44;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -105,11 +116,11 @@
 
 <div id="map"></div>
 
+<div id="loading">Loading trail conditions...</div>
+
 <script>
-    // 1. Mapbox Public Access Key
     mapboxgl.accessToken = 'pk.eyJ1IjoieWFibG9uc2tpIiwiYSI6ImNtbzI3MHl0MDBxbGoyb29uaTZtZmZ1bXEifQ.UECzjig5DXBkhPV4qkElHw';
 
-    // 2. Initialize the Map
     const map = new mapboxgl.Map({
         container: 'map',
         style: 'mapbox://styles/mapbox/outdoors-v12', 
@@ -118,13 +129,11 @@
     });
 
     map.on('load', () => {
-        // 3. Public bucket url
         map.addSource('hikes', {
             type: 'geojson',
             data: 'https://storage.googleapis.com/hikeability-public-map-data/example.geojson' 
         });
 
-        // 4. Draw the dots
         map.addLayer({
             'id': 'hike-points',
             'type': 'circle',
@@ -134,24 +143,22 @@
                     'interpolate',
                     ['linear'],
                     ['get', 'hikeability_score'],
-                    1, '#ff0000',  // 1 = Red
-                    5, '#ffff00',  // 5 = Yellow
-                    10, '#00ff00'  // 10 = Green
+                    1, '#ff0000',
+                    5, '#ffff00',
+                    10, '#00ff00'
                 ],
                 'circle-radius': 8, 
                 'circle-stroke-width': 1.5, 
-                'circle-stroke-color': '#ffffff' // White outline looks cleaner than black
+                'circle-stroke-color': '#ffffff'
             }
         });
         
-        // 5. Popups
         map.on('click', 'hike-points', (e) => {
             const coordinates = e.features[0].geometry.coordinates.slice();
             const name = e.features[0].properties.name;
             const score = e.features[0].properties.hikeability_score;
             const reason = e.features[0].properties.reasoning;
 
-            // Simple HTML formatting for the popup
             const popupContent = `
                 <div style="font-family: sans-serif;">
                     <h3 style="margin: 0 0 5px 0; font-size: 16px;">${name}</h3>
@@ -168,6 +175,8 @@
         
         map.on('mouseenter', 'hike-points', () => { map.getCanvas().style.cursor = 'pointer'; });
         map.on('mouseleave', 'hike-points', () => { map.getCanvas().style.cursor = ''; });
+
+        document.getElementById('loading').style.display = 'none';
     });
 </script>
 
