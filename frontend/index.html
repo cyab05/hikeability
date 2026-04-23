@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Hikeability | Washington Trail Conditions</title>
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.2.0/mapbox-gl.js"></script>
+    <style>
+        /* Modern, clean font settings */
+        body { 
+            margin: 0; 
+            padding: 0; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            background-color: #f8f9fa;
+        }
+
+        /* The Top Header Bar */
+        #header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 80px;
+            background-color: rgb(228, 210, 172);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            box-sizing: border-box;
+            font-family: Georgia, 'Times New Roman', Times, serif;
+        }
+
+        #header h1 {
+            margin: 0;
+            font-size: 32px;
+            font-weight: 700;
+            color: #373d44;
+        }
+
+        #header-logo {
+            height: 15px;
+            width: auto;
+            margin-top: 10px;
+        }
+
+        /* The Map Container (pushed down so the header doesn't cover it) */
+        #map { 
+            position: absolute; 
+            top: 60px; 
+            bottom: 0; 
+            width: 100%; 
+        }
+
+        /* The Floating Legend */
+        #legend {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            background: rgb(242, 233, 213);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+            z-index: 10;
+            font-family: Georgia, 'Times New Roman', Times, serif;
+        }
+
+        #legend h3 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            color: #373d44;
+        }
+
+        .legend-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 13px;
+            color: #555;
+        }
+
+        .color-box {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            margin-right: 10px;
+            border: 1px solid rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+
+<div id="header">
+    <h1>hikeability</h1>
+    <img src="green-snowflake.png" alt="Hikeability Logo" id="header-logo">
+</div>
+
+<div id="legend">
+    <h3>Passability Score</h3>
+    <div class="legend-row"><div class="color-box" style="background: #54B393;"></div> 10 - Clear / Perfect</div>
+    <div class="legend-row"><div class="color-box" style="background: #F7A745;"></div> 5 - Moderate / Caution</div>
+    <div class="legend-row"><div class="color-box" style="background: #DC4848;"></div> 1 - Impassable / Danger</div>
+</div>
+
+<div id="map"></div>
+
+<script>
+    // 1. Mapbox Public Access Key
+    mapboxgl.accessToken = 'pk.eyJ1IjoieWFibG9uc2tpIiwiYSI6ImNtbzI3MHl0MDBxbGoyb29uaTZtZmZ1bXEifQ.UECzjig5DXBkhPV4qkElHw';
+
+    // 2. Initialize the Map
+    const map = new mapboxgl.Map({
+        container: 'map',
+        style: 'mapbox://styles/mapbox/outdoors-v12', 
+        center: [-120.7401, 47.7511], 
+        zoom: 6.5 
+    });
+
+    map.on('load', () => {
+        // 3. Public bucket url
+        map.addSource('hikes', {
+            type: 'geojson',
+            data: 'https://storage.googleapis.com/hikeability-public-map-data/example.geojson' 
+        });
+
+        // 4. Draw the dots
+        map.addLayer({
+            'id': 'hike-points',
+            'type': 'circle',
+            'source': 'hikes',
+            'paint': {
+                'circle-color': [
+                    'interpolate',
+                    ['linear'],
+                    ['get', 'hikeability_score'],
+                    1, '#ff0000',  // 1 = Red
+                    5, '#ffff00',  // 5 = Yellow
+                    10, '#00ff00'  // 10 = Green
+                ],
+                'circle-radius': 8, 
+                'circle-stroke-width': 1.5, 
+                'circle-stroke-color': '#ffffff' // White outline looks cleaner than black
+            }
+        });
+        
+        // 5. Popups
+        map.on('click', 'hike-points', (e) => {
+            const coordinates = e.features[0].geometry.coordinates.slice();
+            const name = e.features[0].properties.name;
+            const score = e.features[0].properties.hikeability_score;
+            const reason = e.features[0].properties.reasoning;
+
+            // Simple HTML formatting for the popup
+            const popupContent = `
+                <div style="font-family: sans-serif;">
+                    <h3 style="margin: 0 0 5px 0; font-size: 16px;">${name}</h3>
+                    <strong style="font-size: 14px;">Score: ${score}/10</strong>
+                    <p style="margin: 5px 0 0 0; font-size: 13px; color: #555;">${reason}</p>
+                </div>
+            `;
+
+            new mapboxgl.Popup()
+                .setLngLat(coordinates)
+                .setHTML(popupContent)
+                .addTo(map);
+        });
+        
+        map.on('mouseenter', 'hike-points', () => { map.getCanvas().style.cursor = 'pointer'; });
+        map.on('mouseleave', 'hike-points', () => { map.getCanvas().style.cursor = ''; });
+    });
+</script>
+
+</body>
+</html>

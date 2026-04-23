@@ -1,3 +1,2 @@
-beautifulsoup4
-requests
-google-cloud-storage
+beautifulsoup4 @ file:///Users/ec2-user/croot/beautifulsoup4-split_1770291772626/work
+requests @ file:///opt/miniconda3/conda-bld/requests_1762359591792/work
