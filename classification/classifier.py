@@ -69,9 +69,9 @@ def load_few_shot_examples(
 
 
 EXAMPLE_EXPLANATIONS = {
-    "hikeable": "Trail is dry and clear with no obstacles. Safe for all hikers.",
-    "modest": "Patchy snow and uneven footing at higher elevations. Microspikes recommended.",
-    "unhikeable": "Road closed and trail buried under deep snow. Do not attempt.",
+    "hikeable":   "Sunny and dry. Trail is clear and safe for all hikers.",
+    "modest":     "Partly cloudy. Patchy snow at higher elevations — microspikes recommended.",
+    "unhikeable": "Heavy snow and closed road. Trail is buried and inaccessible.",
 }
 
 
