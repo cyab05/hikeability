@@ -84,8 +84,8 @@ Important Considerations:
   - Consider the region. Alpine areas (North Cascades, Mount Rainier, Olympic
     high country) hold snow longer than lowland trails (Puget Sound, San Juan
     Islands, urban parks).
-  - Air quality matters. AQI 101-150 (Unhealthy for Sensitive Groups) should be
-    mentioned in your explanation. AQI above 150 (Unhealthy or worse - often from
+  - Air quality matters. If AQI is 101-150 (Unhealthy for Sensitive Groups),
+    mention in explanation. AQI above 150 (Unhealthy or worse - often from
     wildfire smoke) should push the classification toward modest or unhikeable
     regardless of other conditions.
   - Strong wind gusts on exposed terrain are a safety concern. Gusts above 40 mph

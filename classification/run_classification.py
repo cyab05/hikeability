@@ -299,9 +299,9 @@ def main():
         main_eval()
     else:
         print("Usage:")
-        print(f"  python -m model_sandbox.classification.run_classification full [batch_size]")
-        print(f"  python -m model_sandbox.classification.run_classification incremental")
-        print(f"  python -m model_sandbox.classification.run_classification eval")
+        print(f"  python -m classification.run_classification full [batch_size]")
+        print(f"  python -m classification.run_classification incremental")
+        print(f"  python -m classification.run_classification eval")
 
 
 if __name__ == "__main__":
