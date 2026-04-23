@@ -8,10 +8,10 @@ Modes:
     eval                — Test accuracy against human-labeled CSV.
 
 Usage:
-    python -m model_sandbox.classification.run_classification full
-    python -m model_sandbox.classification.run_classification full 1000
-    python -m model_sandbox.classification.run_classification incremental
-    python -m model_sandbox.classification.run_classification eval
+    python -m classification.run_classification full
+    python -m classification.run_classification full 1000
+    python -m classification.run_classification incremental
+    python -m classification.run_classification eval
 """
 from __future__ import annotations
 
