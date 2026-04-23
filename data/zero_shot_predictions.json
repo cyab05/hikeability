@@ -1,0 +1,32 @@
+[
+  {
+    "hike_id": "1308.2",
+    "hike_name": "Domerie Divide Trail",
+    "hike_region": "Snoqualmie Region > Cle Elum Area",
+    "most_recent_report_date": "2025-08-17",
+    "predicted_label": "hikeable",
+    "label_explanation": "Most recent report: 2025-08-17. Based on weather only: Current weather conditions indicate clear skies, warm temperatures, and light winds, making the trail safe and enjoyable for most hikers.",
+    "strategy": "zero_shot",
+    "classification_source": "weather_only"
+  },
+  {
+    "hike_id": "360-trails",
+    "hike_name": "360 Trails",
+    "hike_region": "Puget Sound and Islands > Seattle-Tacoma Area",
+    "most_recent_report_date": "2026-01-23",
+    "predicted_label": "hikeable",
+    "label_explanation": "Most recent report: 2026-01-23. Based on weather only: Current weather conditions indicate clear skies, warm temperatures, and light winds, making the trail safe and enjoyable for most hikers.",
+    "strategy": "zero_shot",
+    "classification_source": "weather_only"
+  },
+  {
+    "hike_id": "4-cedars-trail",
+    "hike_name": "Tolmie State Park - Four Cedars Trail",
+    "hike_region": "Olympic Peninsula > Olympia",
+    "most_recent_report_date": "2026-03-07",
+    "predicted_label": "hikeable",
+    "label_explanation": "Most recent report: 2026-03-07. Based on weather only: Current weather conditions indicate clear skies, warm temperatures, and light winds, with no precipitation or snow expected. These conditions are favorable for a hike.",
+    "strategy": "zero_shot",
+    "classification_source": "weather_only"
+  }
+]
