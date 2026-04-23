@@ -74,18 +74,33 @@ be present.
 
 Important Considerations:
   - Current weather can override older reports. A clear report from 2 weeks ago 
-    is unreliable if current weather shows heavy snowfall or storms.
+    is unreliable if current weather shows heavy snowfall or storms. Briefly state weather
+    conditions.
   - Trail elevation is critical in the Pacific Northwest. Trails above 4,000 feet 
     often retain snow into June or July. A sunny day at the trailhead does NOT 
     mean the summit is clear. If a trail gains 2,000+ feet and tops out above 
     5,000 feet, assume snow is likely from October through June unless a recent 
     report says otherwise.
-  - Consider the region. Alpine areas (North Cascades, Mount Rainier, Olympic 
-    high country) hold snow longer than lowland trails (Puget Sound, San Juan 
+  - Consider the region. Alpine areas (North Cascades, Mount Rainier, Olympic
+    high country) hold snow longer than lowland trails (Puget Sound, San Juan
     Islands, urban parks).
+  - Air quality matters. If AQI is 101-150 (Unhealthy for Sensitive Groups),
+    mention in explanation. AQI above 150 (Unhealthy or worse - often from
+    wildfire smoke) should push the classification toward modest or unhikeable
+    regardless of other conditions.
+  - Strong wind gusts on exposed terrain are a safety concern. Gusts above 40 mph
+    should be flagged.
+  - If elevation data is not provided, do not assume or reference elevation in
+    your explanation.
   - Your explanation will be shown to hikers on a website.
   - Plain language. Don't use "we..."
+  
+CRITICAL: 
+If weather data is provided, start with a brief weather summary (e.g. "Sunny.",
+"Rain likely.", "Heavy snow.", "Unhealthy air quality — AQI 165."). If no
+weather data, skip the weather phrase. Then 2-3 sentences on trail conditions.
 
 Respond ONLY with a JSON object — no markdown, no extra text:
-{"label": "<hikeable | modest | unhikeable>", "explanation": "<1-2 sentences why>"}
+{"label": "<hikeable | modest | unhikeable>", "explanation": "<weather summary if available>.
+<trail conditions 2-3 sentences>"}
 """
