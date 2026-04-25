@@ -31,12 +31,24 @@ def test_build_input_text_fields():
 def test_build_input_text_with_weather():
     report = {"report_text": "Good conditions."}
     weather = {
-        "current_period": {"short_forecast": "Sunny"},
-        "grid_summary": {},
+        "hourly_forecast": [
+            {
+                "time": "2026-04-22T13:00:00.000",
+                "apparent_temperature": 55.0,
+                "snowfall": 0.0,
+                "snow_depth": 0.0,
+                "us_aqi": 30,
+            }
+        ],
+        "daily_summary": {
+            "weather_code": 0,  # 0 = clear sky per WMO
+            "wind_gusts_10m_max": 10.0,
+            "precipitation_probability_max": 5,
+        },
     }
     result = build_input_text(report, weather=weather)
     assert "Good conditions." in result
-    assert "Sunny" in result
+    assert "clear sky" in result  # mapped from weather_code=0
     
 # ── build_weather_only_text ──────────────────────────────────────────────────
 
