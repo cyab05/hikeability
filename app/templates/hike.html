@@ -134,6 +134,13 @@
     .wta-link:hover { background: rgb(210, 190, 150); }
 
     .no-data { color: #aaa; font-size: 14px; font-style: italic; }
+    .hike-hero {
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        object-fit: cover;
+        border-radius: 12px;
+        margin-bottom: 24px;
+    }
 </style>
 {% endblock %}
 
@@ -141,6 +148,10 @@
 <div class="hike-page">
 
     <a class="back-link" href="/">← Back to map</a>
+
+    {% if hike.image_url %}
+    <img class="hike-hero" src="{{ hike.image_url }}" alt="{{ hike.hike_name }}" onerror="this.style.display='none'">
+    {% endif %}
 
     <div class="hike-header">
         <h2>{{ hike.hike_name }}</h2>
@@ -220,6 +231,24 @@
             <div class="stat">
                 <span class="stat-label">Rating</span>
                 <span class="stat-value">{{ hike.rating }}</span>
+            </div>
+            {% endif %}
+            {% if hike.difficulty %}
+            <div class="stat">
+                <span class="stat-label">Difficulty</span>
+                <span class="stat-value">{{ hike.difficulty }}</span>
+            </div>
+            {% endif %}
+            {% if hike.parking_pass and hike.parking_pass.name %}
+            <div class="stat">
+                <span class="stat-label">Parking Pass</span>
+                <span class="stat-value" style="font-size:14px;">
+                    {% if hike.parking_pass.url %}
+                        <a href="{{ hike.parking_pass.url }}" target="_blank" rel="noopener">{{ hike.parking_pass.name }}</a>
+                    {% else %}
+                        {{ hike.parking_pass.name }}
+                    {% endif %}
+                </span>
             </div>
             {% endif %}
             {% if hike.latitude and hike.longitude %}

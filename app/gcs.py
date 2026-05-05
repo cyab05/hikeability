@@ -138,7 +138,8 @@ def _enrich_coordinates(client: storage.Client, predictions: list[dict]) -> None
     def _has_everything(p: dict) -> bool:
         return (p.get("latitude") is not None and p.get("longitude") is not None
                 and p.get("distance") and p.get("rating") and p.get("url")
-                and p.get("elevation_gain") and p.get("highest_point") and p.get("hike_name"))
+                and p.get("elevation_gain") and p.get("highest_point") and p.get("hike_name")
+                and p.get("image_url") and p.get("difficulty") and p.get("parking_pass") is not None)
 
     needs_fetch = [p for p in predictions if not _has_everything(p)]
 
@@ -173,6 +174,12 @@ def _enrich_coordinates(client: storage.Client, predictions: list[dict]) -> None
                 p["distance"] = meta.get("distance")
             if not p.get("rating"):
                 p["rating"] = meta.get("rating")
+            if not p.get("image_url"):
+                p["image_url"] = meta.get("image_url")
+            if not p.get("difficulty"):
+                p["difficulty"] = meta.get("difficulty")
+            if p.get("parking_pass") is None:
+                p["parking_pass"] = meta.get("parking_pass")
 
 
 def get_hike(hike_id: str, all_predictions: list[dict], client: storage.Client) -> dict | None:
@@ -212,6 +219,9 @@ def build_geojson(predictions: list[dict]) -> dict:
                 "distance":       p.get("distance"),
                 "elevation_gain": p.get("elevation_gain"),
                 "classification_source": p.get("classification_source", ""),
+                "image_url":      p.get("image_url"),
+                "difficulty":     p.get("difficulty"),
+                "parking_pass_name": (p.get("parking_pass") or {}).get("name"),
             },
         })
     return {"type": "FeatureCollection", "features": features}

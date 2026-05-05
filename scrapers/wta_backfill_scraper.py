@@ -66,7 +66,10 @@ class WTABackfillScraper:
             'distance': None,
             'elevation_gain': None,
             'highest_point': None,
-            'rating': None
+            'rating': None,
+            'image_url': None,
+            'difficulty': None,
+            'parking_pass': None,
         }
 
         def get_stat(label_word):
@@ -106,6 +109,41 @@ class WTABackfillScraper:
             if len(coord_spans) >= 2:
                 hike_data['latitude'] = coord_spans[0].get_text(strip=True)
                 hike_data['longitude'] = coord_spans[1].get_text(strip=True)
+
+        # Image URL — prefer Open Graph tag (stable across template versions)
+        og_image = soup.find('meta', property='og:image')
+        if og_image and og_image.get('content'):
+            raw_url = og_image['content']
+            image_url = raw_url if raw_url.startswith('http') else f"{self.base_url}{raw_url}"
+            # Strip cache-busting query strings (e.g. ?width=...)
+            hike_data['image_url'] = image_url.split('?')[0]
+        else:
+            img = soup.select_one('.hero-photo img, #hero-photo img, .hike-hero img')
+            if img and img.get('src'):
+                src = img['src']
+                src = src if src.startswith('http') else f"{self.base_url}{src}"
+                hike_data['image_url'] = src.split('?')[0]
+
+        # Calculated difficulty — WTA pill inside the last stats row
+        difficulty_pill = soup.select_one('.hike-stats__stat--last-row .wta-pill')
+        if difficulty_pill:
+            hike_data['difficulty'] = difficulty_pill.get_text(strip=True)
+
+        # Parking pass / entry fee — inside an .alert block
+        for alert in soup.select('div.alert'):
+            h4 = alert.find('h4')
+            if not h4 or 'Parking Pass' not in h4.get_text():
+                continue
+            a = alert.find('a')
+            if a:
+                href = a.get('href', '')
+                if href.startswith('/'):
+                    href = f"{self.base_url}{href}"
+                hike_data['parking_pass'] = {'name': a.get_text(strip=True), 'url': href}
+            else:
+                text = alert.get_text(separator=' ', strip=True).replace(h4.get_text(strip=True), '').strip()
+                hike_data['parking_pass'] = {'name': text or None, 'url': None}
+            break
 
         return hike_data
 
@@ -307,6 +345,103 @@ class WTABackfillScraper:
         except Exception as e:
             print(f"  -> ERROR uploading to GCS: {e}")
 
+    def backfill_metadata_fields(self, max_workers=10):
+        """One-off pass to populate image_url, difficulty, and parking_pass on
+        existing metadata.json files that were scraped before these fields existed.
+        Skips any hike that already has all three fields present.
+        """
+        print("Listing all metadata.json blobs in GCS...")
+        blobs = list(self.bucket.list_blobs(prefix=f"{self.output_prefix}/"))
+        meta_blobs = [b for b in blobs if b.name.endswith('/metadata.json')]
+        print(f"Found {len(meta_blobs)} metadata.json files to inspect.")
+
+        def _process_blob(blob):
+            try:
+                meta = json.loads(blob.download_as_text())
+            except Exception as e:
+                print(f"  -> ERROR reading {blob.name}: {e}")
+                return
+
+            # Skip if all three new fields are already populated
+            if meta.get('image_url') and meta.get('difficulty') and meta.get('parking_pass') is not None:
+                return
+
+            hike_url = meta.get('url')
+            if not hike_url:
+                print(f"  -> SKIP {blob.name}: no url in metadata")
+                return
+
+            time.sleep(random.uniform(0.5, 1.5))
+            try:
+                response = self.session.get(hike_url, timeout=10)
+                if response.status_code != 200:
+                    print(f"  -> SKIP {blob.name}: HTTP {response.status_code}")
+                    return
+            except Exception as e:
+                print(f"  -> ERROR fetching {hike_url}: {e}")
+                return
+
+            soup = BeautifulSoup(response.text, 'html.parser')
+            page_title = soup.title.get_text(strip=True) if soup.title else ''
+            if 'Just a moment' in page_title or 'Cloudflare' in page_title:
+                print(f"  -> BLOCKED by Cloudflare for {hike_url}")
+                return
+
+            updated = False
+
+            if not meta.get('image_url'):
+                og_image = soup.find('meta', property='og:image')
+                if og_image and og_image.get('content'):
+                    raw = og_image['content']
+                    url = raw if raw.startswith('http') else f"{self.base_url}{raw}"
+                    meta['image_url'] = url.split('?')[0]
+                    updated = True
+                else:
+                    img = soup.select_one('.hero-photo img, #hero-photo img, .hike-hero img')
+                    if img and img.get('src'):
+                        src = img['src']
+                        src = src if src.startswith('http') else f"{self.base_url}{src}"
+                        meta['image_url'] = src.split('?')[0]
+                        updated = True
+
+            if not meta.get('difficulty'):
+                pill = soup.select_one('.hike-stats__stat--last-row .wta-pill')
+                if pill:
+                    meta['difficulty'] = pill.get_text(strip=True)
+                    updated = True
+
+            if meta.get('parking_pass') is None:
+                for alert in soup.select('div.alert'):
+                    h4 = alert.find('h4')
+                    if not h4 or 'Parking Pass' not in h4.get_text():
+                        continue
+                    a = alert.find('a')
+                    if a:
+                        href = a.get('href', '')
+                        if href.startswith('/'):
+                            href = f"{self.base_url}{href}"
+                        meta['parking_pass'] = {'name': a.get_text(strip=True), 'url': href}
+                    else:
+                        text = alert.get_text(separator=' ', strip=True).replace(h4.get_text(strip=True), '').strip()
+                        meta['parking_pass'] = {'name': text or None, 'url': None}
+                    updated = True
+                    break
+
+            if updated:
+                try:
+                    blob.upload_from_string(
+                        json.dumps(meta, indent=4, ensure_ascii=False),
+                        content_type='application/json'
+                    )
+                    print(f"  -> Updated {blob.name}")
+                except Exception as e:
+                    print(f"  -> ERROR uploading {blob.name}: {e}")
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            list(executor.map(_process_blob, meta_blobs))
+
+        print("Backfill complete.")
+
     def run(self, max_hikes=None, max_reports_per_hike=20, max_workers=5):
         """Coordinates the batch run."""
         print("Gathering initial hike links from directory...")
@@ -341,8 +476,13 @@ class WTABackfillScraper:
             time.sleep(0.5)
 
 if __name__ == "__main__":
+    import sys
     # set GOOGLE_APPLICATION_CREDENTIALS to service account file in environment before running
-    TARGET_BUCKET = "wta-hikes" 
-    
+    TARGET_BUCKET = "wta-hikes"
+
     scraper = WTABackfillScraper(bucket_name=TARGET_BUCKET, output_prefix="output/hikes")
-    scraper.run(max_hikes=None, max_reports_per_hike=10, max_workers=3)
+
+    if len(sys.argv) > 1 and sys.argv[1] == "backfill":
+        scraper.backfill_metadata_fields(max_workers=5)
+    else:
+        scraper.run(max_hikes=None, max_reports_per_hike=10, max_workers=3)
