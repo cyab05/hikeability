@@ -888,6 +888,7 @@ function addPinImages() {
 }
 
 const _hoverPopup = new mapboxgl.Popup({ closeButton: false, closeOnClick: false, offset: 12 });
+let _hoverHideTimer = null;
 
 function attachLayerHandlers() {
     // Click cluster → zoom in
@@ -907,6 +908,7 @@ function attachLayerHandlers() {
 
     // Hover point → popup with name + label
     map.on('mouseenter', 'hike-points', (e) => {
+        clearTimeout(_hoverHideTimer);
         map.getCanvas().style.cursor = 'pointer';
         const props = e.features[0].properties;
         const label = props.label.charAt(0).toUpperCase() + props.label.slice(1);
@@ -921,7 +923,11 @@ function attachLayerHandlers() {
             </div>
         `).addTo(map);
     });
-    map.on('mouseleave', 'hike-points', () => { map.getCanvas().style.cursor = ''; _hoverPopup.remove(); });
+    map.on('mouseleave', 'hike-points', () => {
+        map.getCanvas().style.cursor = '';
+        clearTimeout(_hoverHideTimer);
+        _hoverHideTimer = setTimeout(() => _hoverPopup.remove(), 120);
+    });
 }
 
 // ── Map load ──────────────────────────────────────────────────────────────────
