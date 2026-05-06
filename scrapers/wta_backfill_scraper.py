@@ -9,6 +9,21 @@ from bs4 import BeautifulSoup
 import concurrent.futures
 from google.cloud import storage
 
+# Validators for scraped stat fields. Mirror the patterns used in app/gcs.py.
+# We apply them at scrape-time so junk (e.g. the hike description) can't make
+# it into metadata.json when WTA's stats block is missing/replaced by a closure note.
+_VALID_FEET     = re.compile(r"^[\d,]+(\s*(feet|ft))?\.?$", re.IGNORECASE)
+_VALID_DISTANCE = re.compile(r"^[\d.,]+\s*miles?(\s*,?\s*(roundtrip|one-way|of trails))?\.?$", re.IGNORECASE)
+
+
+def _clean_stat(value, validator):
+    """Return the value if it matches the validator regex, else None."""
+    if value is None:
+        return None
+    s = str(value).strip()
+    return s if validator.match(s) else None
+
+
 class WTABackfillScraper:
     def __init__(self, bucket_name, output_prefix="hikes"):
         self.session = requests.Session()
@@ -70,6 +85,7 @@ class WTABackfillScraper:
             'image_url': None,
             'difficulty': None,
             'parking_pass': None,
+            'closure_warning': [],
         }
 
         def get_stat(label_word):
@@ -93,12 +109,17 @@ class WTABackfillScraper:
         rating_tag = soup.find('div', class_='current-rating')
         if rating_tag: hike_data['rating'] = rating_tag.get_text(strip=True)
 
-        hike_data['elevation_gain'] = get_stat(r'Elevation Gain') or get_stat(r'Gain')
-        hike_data['highest_point'] = get_stat(r'Highest Point')
-        
+        # Validate each stat against its expected shape so the loose page-wide
+        # regex fallback in get_stat() can't smuggle in description prose.
+        hike_data['elevation_gain'] = _clean_stat(
+            get_stat(r'Elevation Gain') or get_stat(r'Gain'), _VALID_FEET
+        )
+        hike_data['highest_point'] = _clean_stat(get_stat(r'Highest Point'), _VALID_FEET)
+
         dist = get_stat(r'Length') or get_stat(r'Distance')
         if dist:
-            hike_data['distance'] = re.sub(r'(roundtrip|one-way|of trails).*', r'\1', dist, flags=re.IGNORECASE).strip()
+            cleaned = re.sub(r'(roundtrip|one-way|of trails).*', r'\1', dist, flags=re.IGNORECASE).strip()
+            hike_data['distance'] = _clean_stat(cleaned, _VALID_DISTANCE)
 
         modern_region = soup.select_one('span.wta-icon-headline.h3 .wta-icon-headline__text')
         if modern_region: hike_data['region'] = modern_region.get_text(strip=True)
@@ -145,7 +166,41 @@ class WTABackfillScraper:
                 hike_data['parking_pass'] = {'name': text or None, 'url': None}
             break
 
+        # Closure / advisory notes — div.wta-note variants. Capture every
+        # severity (red, orange, yellow, etc.) so the frontend can color them.
+        hike_data['closure_warning'] = self._extract_notes(soup)
+
         return hike_data
+
+    # WTA uses .wta-note--small as a size variant for non-warning widgets
+    # (e.g. trip-report banners). We only treat color modifiers as real
+    # advisory severities so unrelated notes don't pollute the metadata.
+    _NOTE_SEVERITIES = {'red', 'orange', 'yellow', 'blue', 'green'}
+
+    def _extract_notes(self, soup):
+        """Extract wta-note advisories whose modifier class is a recognized
+        color severity, as a list of {severity, message} dicts. Deduplicated
+        by message. Returns [] when none are present so we can distinguish
+        'checked, no warnings' from 'never checked' in metadata."""
+        notes = []
+        seen = set()
+        for note_div in soup.select('div[class*="wta-note"]'):
+            text_el = note_div.select_one('.wta-note__text')
+            if not text_el:
+                continue
+            msg = text_el.get_text(separator=' ', strip=True).strip('"').strip()
+            if not msg or msg in seen:
+                continue
+            severity = None
+            for cls in note_div.get('class', []):
+                if cls.startswith('wta-note--'):
+                    severity = cls.replace('wta-note--', '')
+                    break
+            if severity not in self._NOTE_SEVERITIES:
+                continue
+            seen.add(msg)
+            notes.append({'severity': severity, 'message': msg})
+        return notes
 
     def get_trip_reports_for_hike(self, hike_url, max_reports=None):
         report_links = []
@@ -346,14 +401,31 @@ class WTABackfillScraper:
             print(f"  -> ERROR uploading to GCS: {e}")
 
     def backfill_metadata_fields(self, max_workers=10):
-        """One-off pass to populate image_url, difficulty, and parking_pass on
-        existing metadata.json files that were scraped before these fields existed.
-        Skips any hike that already has all three fields present.
+        """One-off pass to populate image_url, difficulty, parking_pass, and
+        closure_warning on existing metadata.json files, AND to clean up
+        bad elevation_gain/distance/highest_point values that the old scraper
+        wrote when a closure note replaced the structured stats block.
+
+        Skip predicate (returns True = skip): all expected keys are present,
+        and any stat values that exist match their validator regex.
         """
         print("Listing all metadata.json blobs in GCS...")
         blobs = list(self.bucket.list_blobs(prefix=f"{self.output_prefix}/"))
         meta_blobs = [b for b in blobs if b.name.endswith('/metadata.json')]
         print(f"Found {len(meta_blobs)} metadata.json files to inspect.")
+
+        def _needs_recheck(meta):
+            if not meta.get('image_url'):              return True
+            if not meta.get('difficulty'):             return True
+            if 'parking_pass'    not in meta:          return True
+            if 'closure_warning' not in meta:          return True
+            for field, validator in (('elevation_gain', _VALID_FEET),
+                                     ('distance',       _VALID_DISTANCE),
+                                     ('highest_point',  _VALID_FEET)):
+                v = meta.get(field)
+                if v and not validator.match(str(v).strip()):
+                    return True
+            return False
 
         def _process_blob(blob):
             try:
@@ -362,8 +434,7 @@ class WTABackfillScraper:
                 print(f"  -> ERROR reading {blob.name}: {e}")
                 return
 
-            # Skip if all three new fields are already populated
-            if meta.get('image_url') and meta.get('difficulty') and meta.get('parking_pass') is not None:
+            if not _needs_recheck(meta):
                 return
 
             hike_url = meta.get('url')
@@ -426,6 +497,25 @@ class WTABackfillScraper:
                         meta['parking_pass'] = {'name': text or None, 'url': None}
                     updated = True
                     break
+
+            # Closure warnings — write whenever the field is missing OR the
+            # set of notes on the live page differs from what we have stored.
+            fresh_notes = self._extract_notes(soup)
+            if 'closure_warning' not in meta or meta.get('closure_warning') != fresh_notes:
+                meta['closure_warning'] = fresh_notes
+                updated = True
+
+            # Overwrite stale bad stat values left by the old scraper bug.
+            for field, validator in (('elevation_gain', _VALID_FEET),
+                                     ('highest_point',  _VALID_FEET)):
+                v = meta.get(field)
+                if v and not validator.match(str(v).strip()):
+                    meta[field] = None
+                    updated = True
+            v = meta.get('distance')
+            if v and not _VALID_DISTANCE.match(str(v).strip()):
+                meta['distance'] = None
+                updated = True
 
             if updated:
                 try:

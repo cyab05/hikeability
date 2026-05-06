@@ -141,6 +141,21 @@
         border-radius: 12px;
         margin-bottom: 24px;
     }
+    .trail-note {
+        display: flex;
+        gap: 12px;
+        padding: 14px 18px;
+        border-radius: 8px;
+        margin-bottom: 16px;
+        font-size: 14px;
+        line-height: 1.5;
+    }
+    .trail-note p { margin: 0; }
+    .trail-note-red    { background: #fce8e8; border-left: 4px solid #DC4848; color: #8a1a1a; }
+    .trail-note-orange,
+    .trail-note-yellow { background: #fff5e0; border-left: 4px solid #F7A745; color: #7a4a10; }
+    .trail-note-info   { background: #eef2f7; border-left: 4px solid #6c8aa6; color: #2f4a66; }
+    .trail-note-icon   { font-size: 20px; flex-shrink: 0; line-height: 1.4; }
 </style>
 {% endblock %}
 
@@ -148,6 +163,16 @@
 <div class="hike-page">
 
     <a class="back-link" href="/">← Back to map</a>
+
+    {% if hike.closure_warning %}
+    {% for note in hike.closure_warning %}
+    {% set sev = note.severity if note.severity in ['red', 'orange', 'yellow'] else 'info' %}
+    <div class="trail-note trail-note-{{ sev }}">
+        <span class="trail-note-icon">⚠</span>
+        <p>{{ note.message }}</p>
+    </div>
+    {% endfor %}
+    {% endif %}
 
     {% if hike.image_url %}
     <img class="hike-hero" src="{{ hike.image_url }}" alt="{{ hike.hike_name }}" onerror="this.style.display='none'">

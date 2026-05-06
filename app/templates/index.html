@@ -456,6 +456,21 @@
         margin: 0 0 14px;
         display: block;
     }
+    .panel-note {
+        display: flex;
+        gap: 10px;
+        padding: 10px 14px;
+        border-radius: 8px;
+        margin-bottom: 12px;
+        font-size: 13px;
+        line-height: 1.45;
+    }
+    .panel-note p { margin: 0; }
+    .panel-note-red    { background: #fce8e8; border-left: 4px solid #DC4848; color: #8a1a1a; }
+    .panel-note-orange,
+    .panel-note-yellow { background: #fff5e0; border-left: 4px solid #F7A745; color: #7a4a10; }
+    .panel-note-info   { background: #eef2f7; border-left: 4px solid #6c8aa6; color: #2f4a66; }
+    .panel-note-icon   { font-size: 16px; flex-shrink: 0; }
     #panel-content h2 {
         font-family: Georgia, serif;
         font-size: 20px; color: #373d44;
@@ -557,6 +572,17 @@
         color: #555;
         background: #f0ebe0;
         padding: 3px 8px;
+        border-radius: 12px;
+    }
+    .hp-closed {
+        display: inline-block;
+        background: #DC4848;
+        color: #fff;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        padding: 3px 10px;
         border-radius: 12px;
     }
     .hp-badge {
@@ -935,6 +961,7 @@ function attachLayerHandlers() {
                 <div class="hp-badge-wrap">
                     <span class="hp-badge" style="background:${props.color};">${label}</span>
                     ${props.difficulty ? `<span class="hp-diff">${props.difficulty}</span>` : ''}
+                    ${props.is_closed ? `<span class="hp-closed">⚠ Closed</span>` : ''}
                 </div>
             </div>
         `).addTo(map);
@@ -1363,7 +1390,18 @@ function openPanel(props) {
                 w.description    ? `<div><div class="panel-stat-label">Conditions</div><div class="panel-stat-value">${w.description}</div></div>` : '',
                 w.temp_f != null ? `<div><div class="panel-stat-label">Feels Like</div><div class="panel-stat-value">${Math.round(w.temp_f)}°F</div></div>` : '',
             ].filter(Boolean).join('');
+
+            const warnings = (hike.closure_warning || []).map(n => {
+                const sev = n.severity || 'info';
+                const cls = ['red', 'orange', 'yellow', 'info'].includes(sev) ? sev : 'info';
+                return `<div class="panel-note panel-note-${cls}">
+                    <span class="panel-note-icon">⚠</span>
+                    <p>${n.message}</p>
+                </div>`;
+            }).join('');
+
             extra.innerHTML = `
+                ${warnings}
                 ${stats ? `<div class="panel-section"><h4>Trail Info</h4><div class="panel-stats">${stats}</div></div>` : ''}
 ${weatherStats ? `<div class="panel-section"><h4>Weather at Trailhead</h4><div class="panel-stats">${weatherStats}</div></div>` : ''}
             `;
