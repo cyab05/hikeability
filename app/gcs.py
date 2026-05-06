@@ -128,6 +128,14 @@ def load_latest_predictions(client: storage.Client, date: str | None = None) -> 
         p["highest_point"]  = _clean_stat(p.get("highest_point"),  _VALID_FEET)
         p["distance"]       = _clean_stat(p.get("distance"),       _VALID_DISTANCE)
 
+    # Hard-override the model's label when WTA has flagged a serious closure.
+    # A red wta-note means the trail is inaccessible regardless of what recent
+    # trip reports or weather suggest.
+    for p in predictions:
+        notes = p.get("closure_warning") or []
+        if any(n.get("severity") == "red" for n in notes):
+            p["predicted_label"] = "unhikeable"
+
     return predictions
 
 
@@ -139,8 +147,11 @@ def _enrich_coordinates(client: storage.Client, predictions: list[dict]) -> None
         return (p.get("latitude") is not None and p.get("longitude") is not None
                 and p.get("distance") and p.get("rating") and p.get("url")
                 and p.get("elevation_gain") and p.get("highest_point") and p.get("hike_name")
-                and p.get("image_url") and p.get("difficulty") and p.get("parking_pass") is not None
-                and p.get("closure_warning") is not None)
+                and p.get("image_url") and p.get("difficulty")
+                # parking_pass and closure_warning can legitimately be falsy
+                # (None / []) after enrichment, so check key presence instead
+                # of truthiness to avoid re-fetching on every app boot.
+                and "parking_pass" in p and "closure_warning" in p)
 
     needs_fetch = [p for p in predictions if not _has_everything(p)]
 
