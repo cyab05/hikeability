@@ -232,6 +232,16 @@ function renderCompare(hikes) {
                         <span class="compare-row-label">Last report</span>
                         <span class="compare-row-value">${h.most_recent_report_date || dash}</span>
                     </div>
+                    <div class="compare-row">
+                        <span class="compare-row-label">Parking</span>
+                        <span class="compare-row-value">${
+                            h.parking_pass?.name
+                                ? (h.parking_pass.url
+                                    ? `<a href="${h.parking_pass.url}" target="_blank" rel="noopener" style="color:#373d44;">${h.parking_pass.name}</a>`
+                                    : h.parking_pass.name)
+                                : '<span class="compare-row-value muted">No pass required</span>'
+                        }</span>
+                    </div>
                 </div>
 
                 ${h.label_explanation ? `<div class="compare-explanation">${h.label_explanation}</div>` : ''}
