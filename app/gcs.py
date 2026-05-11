@@ -34,6 +34,17 @@ def _format_pacific(iso_utc: str | None) -> str | None:
 _VALID_FEET     = re.compile(r"^[\d,]+(\s*(feet|ft))?\.?$", re.IGNORECASE)
 _VALID_DISTANCE = re.compile(r"^[\d.,]+\s*miles?(\s*,?\s*(roundtrip|one-way|of trails))?\.?$", re.IGNORECASE)
 
+# WTA reuses red severity for both real closures ("road closed", "trailhead
+# inaccessible") and year-round safety advisories ("in winter the trail
+# crosses an avalanche chute"). We only treat the first kind as a forced
+# unhikeable. Same regex is mirrored in classification.classifier.is_closure_alert
+# — kept inline here so the Vercel deploy doesn't need the classification package.
+_CLOSURE_TERMS = re.compile(
+    r"\b(closed|closure|inaccessible|washed[\s-]*out|impassable|blocked|"
+    r"do\s+not\s+(go|hike|enter|attempt))\b",
+    re.IGNORECASE,
+)
+
 
 def _clean_stat(value, pattern: re.Pattern) -> str | None:
     """Return value if it matches the pattern, else None. Treats blank/None as None."""
@@ -239,7 +250,18 @@ def build_geojson(predictions: list[dict]) -> dict:
                 "parking_pass_name": (p.get("parking_pass") or {}).get("name"),
                 # Flat flags for the hover popup; full closure_warning list is
                 # available via /api/hike/<id>/json for side panel + detail page.
+                # is_closed = ANY red severity (includes year-round safety advisories
+                # like "in winter the trail crosses an avalanche chute").
                 "is_closed":      any(n.get("severity") == "red" for n in notes),
+                # is_real_closure = red severity WITH a closure verb in the message.
+                # Mirrors the post-classification override and is what actually flips
+                # a trail to unhikeable in the UI. Lets the stats dashboard separate
+                # true closures from advisory-only red alerts.
+                "is_real_closure": any(
+                    (n.get("severity") or "").lower() == "red"
+                    and _CLOSURE_TERMS.search(n.get("message") or "")
+                    for n in notes
+                ),
                 # True for any actionable alert (red closure OR orange warning).
                 # Drives the "Trails with alerts" stat card and /trails?has_alert=1.
                 # Yellow/blue/green are excluded as routine info, not alerts.
@@ -247,6 +269,14 @@ def build_geojson(predictions: list[dict]) -> dict:
                     (n.get("severity") or "").lower() in ("red", "orange") for n in notes
                 ),
                 "warning_short":  notes[0]["message"][:80] if notes else None,
+                # Full alert text(s) for the trails-table hover tooltip. Joins all
+                # actionable alerts on the trail (red + orange) prefixed with severity.
+                "warnings_text":  "\n".join(
+                    f"[{(n.get('severity') or '').upper()}] {(n.get('message') or '').strip()}"
+                    for n in notes
+                    if (n.get("severity") or "").lower() in ("red", "orange")
+                    and (n.get("message") or "").strip()
+                ) or None,
             },
         })
     return {"type": "FeatureCollection", "features": features}

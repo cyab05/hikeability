@@ -123,8 +123,45 @@
     .alert-badge {
         font-size: 13px;
         margin-left: 6px;
-        cursor: help;
+        cursor: inherit;        /* match the row's pointer cursor instead of "?" */
         vertical-align: 1px;
+        position: relative;     /* anchor for the custom tooltip below */
+    }
+    /* Custom hover tooltip — instant, dark-pill style. Replaces the native
+       browser title tooltip which has a hardcoded ~2s delay.
+       Anchored on the LEFT (not centered) because the badge sits in the
+       leftmost table column — centering would clip the tooltip off-screen. */
+    .alert-badge[data-tooltip]:hover::after {
+        content: attr(data-tooltip);
+        position: absolute;
+        bottom: calc(100% + 8px);
+        left: -4px;                 /* slight overhang so arrow lines up nicely */
+        white-space: pre-wrap;      /* render \n in warnings_text as line breaks */
+        background: #373d44;
+        color: #fff;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        line-height: 1.45;
+        max-width: 360px;
+        width: max-content;
+        text-align: left;
+        z-index: 100;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.28);
+        pointer-events: none;
+    }
+    /* Small triangle pointing down at the badge. Stays centered on the icon
+       even though the tooltip itself is left-anchored. */
+    .alert-badge[data-tooltip]:hover::before {
+        content: '';
+        position: absolute;
+        bottom: calc(100% + 3px);
+        left: 50%;
+        transform: translateX(-50%);
+        border: 5px solid transparent;
+        border-top-color: #2a2a2a;
+        z-index: 101;
+        pointer-events: none;
     }
 
     /* Difficulty picker — same shell as region picker, with checkmark indicators */
@@ -688,13 +725,21 @@ function render() {
     tbody.innerHTML = rows.map(h => {
         const cap = h.label.charAt(0).toUpperCase() + h.label.slice(1);
         // Alert badge: red ⚠ for closures, orange ⚠ for warnings, none otherwise.
-        // Hover surfaces the alert text via the title attribute.
+        // Hover surfaces the full alert text(s) via the title attribute — multiple
+        // alerts are joined with newlines (most browsers render \n in title tooltips).
         let alertBadge = '';
         if (h.has_alert) {
             const isRed = h.is_closed;
             const color = isRed ? '#DC4848' : '#F7A745';
-            const tip = (h.warning_short || (isRed ? 'Trail closure' : 'Trail warning')).replace(/"/g, '&quot;');
-            alertBadge = ` <span class="alert-badge" style="color:${color}" title="${tip}" aria-label="${tip}">⚠</span>`;
+            const fallback = isRed ? 'Trail closure' : 'Trail warning';
+            // HTML-escape order matters: & must be replaced first so the
+            // entity escapes added below don't get double-encoded.
+            const tip = (h.warnings_text || h.warning_short || fallback)
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+            alertBadge = ` <span class="alert-badge" style="color:${color}" data-tooltip="${tip}" aria-label="${tip}">⚠</span>`;
         }
         return `<tr onclick="window.location='/hike/${h.hike_id}'">
             <td class="td-name">${h.name}${alertBadge}</td>

@@ -140,11 +140,14 @@ fetch('/api/hikes.geojson')
         const sources = { 'report+weather': 0, weather_only: 0, other: 0 };
         const regionMap = {};
         let withAlerts = 0;
-        // Split alerts by their highest severity for the per-severity donut.
-        // is_closed = any red alert; has_alert = any red OR orange.
-        // So orange-only trails are has_alert && !is_closed.
-        let redAlerts = 0;
-        let orangeAlerts = 0;
+        // Split alerts into four buckets for the per-severity donut. WTA uses
+        // red severity for both real closures ("road closed", "inaccessible")
+        // AND year-round safety advisories ("in winter the trail crosses an
+        // avalanche chute"). Only the first kind flips a trail to unhikeable;
+        // we split them here so the chart isn't misleading.
+        let realClosures   = 0;  // red + closure verb in message
+        let redAdvisories  = 0;  // red severity but no closure verb
+        let orangeAlerts   = 0;  // orange only (no red)
 
         hikes.forEach(h => {
             if (counts[h.label] !== undefined) counts[h.label]++;
@@ -154,8 +157,9 @@ fetch('/api/hikes.geojson')
             if (!regionMap[r]) regionMap[r] = { hikeable: 0, modest: 0, unhikeable: 0 };
             if (regionMap[r][h.label] !== undefined) regionMap[r][h.label]++;
             if (h.has_alert) withAlerts++;
-            if (h.is_closed) redAlerts++;
-            else if (h.has_alert) orangeAlerts++;
+            if (h.is_real_closure)   realClosures++;
+            else if (h.is_closed)    redAdvisories++;
+            else if (h.has_alert)    orangeAlerts++;
         });
 
         // Subtitle
@@ -205,15 +209,17 @@ fetch('/api/hikes.geojson')
             options: { plugins: { legend: { position: 'bottom' } }, cutout: '60%' },
         });
 
-        // Alerts-by-severity chart (red closures vs orange warnings, plus "no alerts" remainder)
+        // Alerts-by-severity chart: real closures vs red advisories vs orange warnings
+        // vs no alerts. WTA's red severity covers both genuine closures AND year-round
+        // safety advisories; we split them so the chart matches the override's logic.
         const noAlerts = total - withAlerts;
         new Chart(document.getElementById('alerts-chart'), {
             type: 'doughnut',
             data: {
-                labels: ['Red (closures)', 'Orange (warnings)', 'No alerts'],
+                labels: ['Red (closures)', 'Red (advisories)', 'Orange (warnings)', 'No alerts'],
                 datasets: [{
-                    data: [redAlerts, orangeAlerts, noAlerts],
-                    backgroundColor: ['#DC4848', '#F7A745', '#e8e4dc'],
+                    data: [realClosures, redAdvisories, orangeAlerts, noAlerts],
+                    backgroundColor: ['#DC4848', '#E89090', '#F7A745', '#e8e4dc'],
                     borderWidth: 0,
                 }],
             },
