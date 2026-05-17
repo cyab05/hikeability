@@ -164,6 +164,38 @@
         pointer-events: none;
     }
 
+    /* Alert dropdown swatches — match the stats dashboard pie chart colors */
+    .alert-swatch {
+        display: inline-block;
+        width: 10px; height: 10px;
+        border-radius: 50%;
+        margin-right: 8px;
+        vertical-align: 1px;
+    }
+    .alert-swatch-closure  { background: #DC4848; }
+    .alert-swatch-advisory { background: #E89090; }
+    .alert-swatch-warning  { background: #F7A745; }
+
+    /* "only" quick-select link inside multi-select dropdowns — hover-revealed */
+    .rp-item-right {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .only-btn {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #888;
+        opacity: 0;
+        transition: opacity 0.12s, color 0.12s;
+        padding: 2px 4px;
+        border-radius: 4px;
+    }
+    .rp-item:hover .only-btn { opacity: 1; }
+    .only-btn:hover { color: #4a6b8a; background: #fff; }
+
     /* Difficulty picker — same shell as region picker, with checkmark indicators */
     .diff-picker { position: relative; }
     .diff-picker .rp-dropdown { min-width: 200px; }
@@ -359,19 +391,24 @@
             </div>
             <div class="rp-dropdown" id="diff-dropdown">
                 <div class="rp-item diff-item" data-diff="easy">
-                    <span>Easy</span><span class="diff-check">✓</span>
+                    <span>Easy</span>
+                    <span class="rp-item-right"><span class="only-btn">only</span><span class="diff-check">✓</span></span>
                 </div>
                 <div class="rp-item diff-item" data-diff="easy-moderate">
-                    <span>Easy/Moderate</span><span class="diff-check">✓</span>
+                    <span>Easy/Moderate</span>
+                    <span class="rp-item-right"><span class="only-btn">only</span><span class="diff-check">✓</span></span>
                 </div>
                 <div class="rp-item diff-item" data-diff="moderate">
-                    <span>Moderate</span><span class="diff-check">✓</span>
+                    <span>Moderate</span>
+                    <span class="rp-item-right"><span class="only-btn">only</span><span class="diff-check">✓</span></span>
                 </div>
                 <div class="rp-item diff-item" data-diff="moderate-hard">
-                    <span>Moderate/Hard</span><span class="diff-check">✓</span>
+                    <span>Moderate/Hard</span>
+                    <span class="rp-item-right"><span class="only-btn">only</span><span class="diff-check">✓</span></span>
                 </div>
                 <div class="rp-item diff-item" data-diff="hard">
-                    <span>Hard</span><span class="diff-check">✓</span>
+                    <span>Hard</span>
+                    <span class="rp-item-right"><span class="only-btn">only</span><span class="diff-check">✓</span></span>
                 </div>
             </div>
         </div>
@@ -381,19 +418,58 @@
             </div>
             <div class="rp-dropdown" id="pass-dropdown">
                 <div class="rp-item pass-item" data-pass="none">
-                    <span>No pass required</span><span class="diff-check">✓</span>
+                    <span>No pass required</span>
+                    <span class="rp-item-right">
+                        <span class="only-btn">only</span>
+                        <span class="diff-check">✓</span>
+                    </span>
                 </div>
                 <div class="rp-item pass-item" data-pass="nw-forest">
-                    <span>Northwest Forest Pass</span><span class="diff-check">✓</span>
+                    <span>Northwest Forest Pass</span>
+                    <span class="rp-item-right">
+                        <span class="only-btn">only</span>
+                        <span class="diff-check">✓</span>
+                    </span>
                 </div>
                 <div class="rp-item pass-item" data-pass="discover">
-                    <span>Discover Pass</span><span class="diff-check">✓</span>
+                    <span>Discover Pass</span>
+                    <span class="rp-item-right">
+                        <span class="only-btn">only</span>
+                        <span class="diff-check">✓</span>
+                    </span>
                 </div>
                 <div class="rp-item pass-item" data-pass="national">
-                    <span>National Park Pass</span><span class="diff-check">✓</span>
+                    <span>National Park Pass</span>
+                    <span class="rp-item-right">
+                        <span class="only-btn">only</span>
+                        <span class="diff-check">✓</span>
+                    </span>
                 </div>
                 <div class="rp-item pass-item" data-pass="sno-park">
-                    <span>Sno-Parks Permit</span><span class="diff-check">✓</span>
+                    <span>Sno-Parks Permit</span>
+                    <span class="rp-item-right">
+                        <span class="only-btn">only</span>
+                        <span class="diff-check">✓</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+        <div class="diff-picker" id="alert-picker">
+            <div class="rp-trigger" id="alert-trigger">
+                <span class="alert-label">Alerts: Any</span><span>▾</span>
+            </div>
+            <div class="rp-dropdown" id="alert-dropdown">
+                <div class="rp-item alert-item" data-alert="closure">
+                    <span><span class="alert-swatch alert-swatch-closure"></span>Closure</span>
+                    <span class="rp-item-right"><span class="only-btn">only</span><span class="diff-check">✓</span></span>
+                </div>
+                <div class="rp-item alert-item" data-alert="advisory">
+                    <span><span class="alert-swatch alert-swatch-advisory"></span>Advisory</span>
+                    <span class="rp-item-right"><span class="only-btn">only</span><span class="diff-check">✓</span></span>
+                </div>
+                <div class="rp-item alert-item" data-alert="warning">
+                    <span><span class="alert-swatch alert-swatch-warning"></span>Warning</span>
+                    <span class="rp-item-right"><span class="only-btn">only</span><span class="diff-check">✓</span></span>
                 </div>
             </div>
         </div>
@@ -514,6 +590,24 @@ const activePasses = _passParam
     ? new Set(_passParam.split(',').filter(p => PASS_ALL.includes(p)))
     : new Set(PASS_ALL);
 if (activePasses.size === 0) PASS_ALL.forEach(p => activePasses.add(p));
+
+// Alert severity: trails carry has_alert / is_closed / is_real_closure flags
+//   closure  — is_real_closure (red severity + closure verb, blocks access)
+//   advisory — is_closed (red severity) but NOT a real closure (e.g. avalanche
+//              advisories that linger year-round)
+//   warning  — has_alert but not red (orange severity)
+const ALERT_LABELS = {
+    closure:  'Closure',
+    advisory: 'Advisory',
+    warning:  'Warning',
+};
+const ALERT_ALL = Object.keys(ALERT_LABELS);
+const _alertParam = _params.get('alert');
+const activeAlerts = _alertParam
+    ? new Set(_alertParam.split(',').filter(a => ALERT_ALL.includes(a)))
+    : new Set(ALERT_ALL);
+if (activeAlerts.size === 0) ALERT_ALL.forEach(a => activeAlerts.add(a));
+
 const DIST_BOUNDS = [0, 50];
 const ELEV_BOUNDS = [0, 10000];
 let distRange = [
@@ -565,6 +659,16 @@ function passMatches(h) {
     }
     return false;
 }
+function alertMatches(h) {
+    // If all three buckets are on, the filter is a no-op. Trails with NO alerts
+    // are excluded only when the filter is narrowed (any subset).
+    if (activeAlerts.size === ALERT_ALL.length) return true;
+    if (!h.has_alert) return false;
+    if (activeAlerts.has('closure')  && h.is_real_closure)               return true;
+    if (activeAlerts.has('advisory') && h.is_closed && !h.is_real_closure) return true;
+    if (activeAlerts.has('warning')  && h.has_alert && !h.is_closed)     return true;
+    return false;
+}
 
 // Sync condition button visual state with initial activeConditions
 document.querySelectorAll('.cond-btn[data-label]').forEach(btn => {
@@ -604,9 +708,13 @@ document.querySelectorAll('.cond-btn[data-label]').forEach(btn => {
     dropdown.addEventListener('click', (e) => e.stopPropagation());
 
     dropdown.querySelectorAll('.diff-item').forEach(item => {
-        item.addEventListener('click', () => {
+        item.addEventListener('click', (e) => {
             const d = item.dataset.diff;
-            if (activeDifficulties.has(d)) {
+            if (e.target.classList.contains('only-btn')) {
+                e.stopPropagation();
+                activeDifficulties.clear();
+                activeDifficulties.add(d);
+            } else if (activeDifficulties.has(d)) {
                 if (activeDifficulties.size === 1) return;  // can't unselect all
                 activeDifficulties.delete(d);
             } else {
@@ -651,13 +759,70 @@ document.querySelectorAll('.cond-btn[data-label]').forEach(btn => {
     dropdown.addEventListener('click', (e) => e.stopPropagation());
 
     dropdown.querySelectorAll('.pass-item').forEach(item => {
-        item.addEventListener('click', () => {
+        item.addEventListener('click', (e) => {
             const p = item.dataset.pass;
-            if (activePasses.has(p)) {
+            // "only" link → select just this one
+            if (e.target.classList.contains('only-btn')) {
+                e.stopPropagation();
+                activePasses.clear();
+                activePasses.add(p);
+            } else if (activePasses.has(p)) {
                 if (activePasses.size === 1) return;
                 activePasses.delete(p);
             } else {
                 activePasses.add(p);
+            }
+            syncUI();
+            render();
+        });
+    });
+
+    syncUI();
+})();
+
+// ── Alert severity multi-select dropdown ─────────────────────────────────────
+(function setupAlertPicker() {
+    const trigger  = document.getElementById('alert-trigger');
+    const dropdown = document.getElementById('alert-dropdown');
+    const label    = trigger.querySelector('.alert-label');
+
+    function syncUI() {
+        const all = activeAlerts.size === ALERT_ALL.length;
+        const n   = activeAlerts.size;
+        if (all) {
+            label.textContent = 'Alerts';
+        } else if (n <= 2) {
+            // 1–2 selections — list them in canonical order
+            const ordered = ALERT_ALL.filter(a => activeAlerts.has(a));
+            label.textContent = 'Alerts: ' + ordered.map(a => ALERT_LABELS[a]).join(', ');
+        } else {
+            label.textContent = `Alerts: ${n} selected`;
+        }
+        trigger.classList.toggle('has-active', !all);
+        dropdown.querySelectorAll('.alert-item').forEach(item => {
+            item.classList.toggle('selected', activeAlerts.has(item.dataset.alert));
+        });
+    }
+
+    trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dropdown.classList.toggle('open');
+    });
+    document.addEventListener('click', () => dropdown.classList.remove('open'));
+    dropdown.addEventListener('click', (e) => e.stopPropagation());
+
+    dropdown.querySelectorAll('.alert-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            const a = item.dataset.alert;
+            if (e.target.classList.contains('only-btn')) {
+                e.stopPropagation();
+                activeAlerts.clear();
+                activeAlerts.add(a);
+            } else if (activeAlerts.has(a)) {
+                if (activeAlerts.size === 1) return;
+                activeAlerts.delete(a);
+            } else {
+                activeAlerts.add(a);
             }
             syncUI();
             render();
@@ -698,6 +863,7 @@ function filtered() {
         elevInRange(h) &&
         difficultyMatches(h) &&
         passMatches(h) &&
+        alertMatches(h) &&
         (!recentOnly || h.classification_source === 'report+weather') &&
         (!alertsOnly || h.has_alert) &&
         (!searchQuery || h.name.toLowerCase().includes(searchQuery))
@@ -843,8 +1009,11 @@ document.getElementById('reset-filters-btn').addEventListener('click', () => {
     DIFF_ALL.forEach(d => activeDifficulties.add(d));
     activePasses.clear();
     PASS_ALL.forEach(p => activePasses.add(p));
+    activeAlerts.clear();
+    ALERT_ALL.forEach(a => activeAlerts.add(a));
     activeRegion = '';
     recentOnly = false;
+    alertsOnly = false;
     distRange = [DIST_BOUNDS[0], DIST_BOUNDS[1]];
     elevRange = [ELEV_BOUNDS[0], ELEV_BOUNDS[1]];
     searchQuery = '';
@@ -875,6 +1044,15 @@ document.getElementById('reset-filters-btn').addEventListener('click', () => {
     passTrigger.classList.remove('has-active');
     document.querySelectorAll('.pass-item').forEach(item => {
         item.classList.toggle('selected', activePasses.has(item.dataset.pass));
+    });
+
+    // Alert picker
+    const alertTrigger = document.getElementById('alert-trigger');
+    const alertLabel   = alertTrigger.querySelector('.alert-label');
+    alertLabel.textContent = 'Alerts';
+    alertTrigger.classList.remove('has-active');
+    document.querySelectorAll('.alert-item').forEach(item => {
+        item.classList.toggle('selected', activeAlerts.has(item.dataset.alert));
     });
 
     // Sliders — set inputs and dispatch input event so the existing handler updates fill+label
