@@ -9,14 +9,16 @@ import json
 import os
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
 
 from dotenv import load_dotenv
 from openai import OpenAI
 
 from .config import (
-    API_DELAY_SECONDS,
     CSV_LABEL_MAP,
     LABELS,
+    MAX_WORKERS,
     MODEL_ID,
     NVIDIA_API_BASE,
     PER_LABEL,
@@ -101,6 +103,68 @@ def _format_elevation(data: dict) -> str | None:
     return None
 
 
+# WTA reuses "red" severity for two different things: real closures
+# ("road closed", "trailhead inaccessible") and seasonal safety advisories
+# ("in winter the trail crosses an avalanche chute"). The first should force
+# unhikeable; the second should defer to recent reports + weather. We
+# distinguish by looking for explicit closure verbs in the message.
+_CLOSURE_TERMS = re.compile(
+    r"\b(closed|closure|inaccessible|washed[\s-]*out|impassable|blocked|"
+    r"do\s+not\s+(go|hike|enter|attempt))\b",
+    re.IGNORECASE,
+)
+
+
+def is_closure_alert(note: dict) -> bool:
+    """True if this WTA note represents an active closure / inaccessibility,
+    as opposed to a year-round safety advisory tagged red."""
+    if (note.get("severity") or "").lower() != "red":
+        return False
+    return bool(_CLOSURE_TERMS.search(note.get("message") or ""))
+
+
+_SEVERITY_LABEL = {
+    "orange": "SERIOUS WARNING",
+    "yellow": "CAUTION",
+    "blue":   "INFORMATIONAL",
+    "green":  "INFORMATIONAL",
+}
+
+
+def format_trail_alerts(notes: list[dict] | None) -> str | None:
+    """Render closure_warning list into a labeled prompt block. Returns None if empty."""
+    if not notes:
+        return None
+    lines = ["Official trail alerts (from WTA — these are authoritative):"]
+    requires_ack = False
+    for n in notes:
+        sev = (n.get("severity") or "").lower()
+        if sev == "red":
+            # Closure verbs vs. seasonal safety advisory get different tags
+            # so the LLM knows whether to force unhikeable.
+            tag = "CLOSURE / DO NOT GO" if is_closure_alert(n) else "SERIOUS WARNING"
+        else:
+            tag = _SEVERITY_LABEL.get(sev, sev.upper() or "ALERT")
+        msg = (n.get("message") or "").strip()
+        if msg:
+            lines.append(f"  [{tag}] {msg}")
+            # Closures + warnings + cautions all need a mention; informational
+            # blue/green don't (permit notices etc. clutter the explanation).
+            if tag in ("CLOSURE / DO NOT GO", "SERIOUS WARNING", "CAUTION"):
+                requires_ack = True
+    if requires_ack:
+        lines.append(
+            "Your explanation MUST reference the alert(s) above in natural prose. "
+            "For closures, lead with 'Trail closed: <reason>'. For warnings/cautions "
+            "on a currently-passable trail, name the hazard so hikers know about it "
+            "(e.g. 'WTA notes an avalanche chute in winter — snow-free now per "
+            "recent reports.'). Do not include the bracketed tags like "
+            "[SERIOUS WARNING] in your explanation — write naturally. "
+            "Do not omit the alert from your explanation."
+        )
+    return "\n".join(lines)
+
+
 def _format_single_report(report: dict, idx: int | None = None) -> str:
     """Format one trip report as a labeled block."""
     header = f"Report {idx}" if idx else "Report"
@@ -138,6 +202,11 @@ def build_input_text(trail: dict, weather: dict | None = None) -> str:
     else:
         parts.append("Elevation data not available.")
 
+    alerts = format_trail_alerts(trail.get("closure_warning"))
+    if alerts:
+        parts.append("")
+        parts.append(alerts)
+
     reports = trail.get("reports") or []
     if reports:
         parts.append("")
@@ -172,6 +241,12 @@ def build_weather_only_text(hike: dict, weather: dict) -> str:
         parts.append(elevation)
     else:
         parts.append("Elevation data is not available for this trail.")
+
+    alerts = format_trail_alerts(hike.get("closure_warning"))
+    if alerts:
+        parts.append("")
+        parts.append(alerts)
+
     parts += [
         "",
         staleness_note,
@@ -245,59 +320,62 @@ def classify_batch(
     client: OpenAI,
     examples: list[dict] | None = None,
     weather_map: dict[str, dict] | None = None,
+    max_workers: int = MAX_WORKERS,
 ) -> list[dict]:
-    """Classify reports + weather-only hikes. Returns enriched predictions."""
+    """Classify reports + weather-only hikes in parallel. Returns enriched predictions.
+
+    Each call to NVIDIA's API is independent, so we fan out via a thread pool.
+    classify_one already retries with backoff on transient errors, so a single
+    bad call doesn't poison the pool. Output order is not preserved (callers
+    serialize to JSON, where order doesn't matter).
+    """
     weather_map = weather_map or {}
-    results = []
 
-    total = len(reports) + sum(1 for h in stale_hikes if h["hike_id"] in weather_map)
-    idx = 0
-
-    # Classify recent reports (report + weather)
+    # Build a flat task list. Each task carries everything the worker needs.
+    tasks: list[tuple[str, dict, str, dict]] = []
     for report in reports:
-        idx += 1
-        weather = weather_map.get(report.get("hike_id"))
-        text = build_input_text(report, weather=weather)
-        print(f"  [{idx}/{total}] {report.get('hike_name', '?')[:30]}...", end=" ", flush=True)
-
-        pred = classify_one(text, client, examples=examples)
-        print(pred["label"].upper())
-        print(f"    {pred['explanation']}")
-
-        enriched = {**report}
-        enriched["predicted_label"] = pred["label"]
-        enriched["label_explanation"] = pred["explanation"]
-        enriched["classification_source"] = "report+weather"
-        enriched.update(extract_weather_summary(weather))
-        results.append(enriched)
-        time.sleep(API_DELAY_SECONDS)
-
-    # Classify stale hikes (weather only)
+        weather = weather_map.get(report.get("hike_id")) or {}
+        tasks.append(("report", report, build_input_text(report, weather=weather), weather))
     for hike in stale_hikes:
-        weather = weather_map.get(hike["hike_id"])
+        weather = weather_map.get(hike.get("hike_id"))
         if not weather:
-            continue
-        idx += 1
-        text = build_weather_only_text(hike, weather)
-        print(f"  [{idx}/{total}] {hike.get('hike_name', '?')[:30]} (weather only)...", end=" ", flush=True)
+            continue  # weather-only path requires weather; skip if missing
+        tasks.append(("stale", hike, build_weather_only_text(hike, weather), weather))
 
+    total = len(tasks)
+    counter = {"n": 0}
+    counter_lock = Lock()
+
+    def _classify_task(task: tuple[str, dict, str, dict]) -> dict:
+        kind, item, text, weather = task
         pred = classify_one(text, client, examples=examples)
-        print(pred["label"].upper())
-        print(f"    {pred['explanation']}")
 
-        enriched = {**hike}
+        with counter_lock:
+            counter["n"] += 1
+            n = counter["n"]
+        suffix = "" if kind == "report" else " (weather only)"
+        print(f"  [{n}/{total}] {item.get('hike_name', '?')[:30]}{suffix}... {pred['label'].upper()}")
+
+        enriched = {**item}
         enriched["predicted_label"] = pred["label"]
-        last_report = hike.get("most_recent_report_date")
-        if last_report:
-            staleness = f"Most recent report: {last_report}."
+        if kind == "report":
+            enriched["label_explanation"] = pred["explanation"]
+            enriched["classification_source"] = "report+weather"
         else:
-            staleness = "No reports on record."
-        enriched["label_explanation"] = (
-            f"{staleness} Based on weather only: {pred['explanation']}"
-        )
-        enriched["classification_source"] = "weather_only"
+            last_report = item.get("most_recent_report_date")
+            staleness = (
+                f"Most recent report: {last_report}." if last_report
+                else "No reports on record."
+            )
+            enriched["label_explanation"] = (
+                f"{staleness} Based on weather only: {pred['explanation']}"
+            )
+            enriched["classification_source"] = "weather_only"
         enriched.update(extract_weather_summary(weather))
-        results.append(enriched)
-        time.sleep(API_DELAY_SECONDS)
+        return enriched
 
-    return results
+    if not tasks:
+        return []
+
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        return list(pool.map(_classify_task, tasks))
