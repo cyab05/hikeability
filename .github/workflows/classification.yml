@@ -2,7 +2,7 @@ name: Trail Condition Classification
 
 on:
   schedule:
-    - cron: "0 2 * * *"
+    - cron: "0 9 * * *"
   workflow_dispatch:
     inputs:
       mode:

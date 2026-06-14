@@ -185,6 +185,13 @@ if (ids.length < 2) {
 function renderCompare(hikes) {
     const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
     const dash = '<span class="compare-row-value muted">—</span>';
+    // YYYY-MM-DD → M/D/YYYY for the user-facing "Last report" cell.
+    function fmtDate(s) {
+        if (!s) return null;
+        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+        if (!m) return s;
+        return `${+m[2]}/${+m[3]}/${m[1]}`;
+    }
 
     const cols = hikes.map(h => {
         const w = h.weather || {};
@@ -230,7 +237,7 @@ function renderCompare(hikes) {
                     </div>
                     <div class="compare-row">
                         <span class="compare-row-label">Last report</span>
-                        <span class="compare-row-value">${h.most_recent_report_date || dash}</span>
+                        <span class="compare-row-value">${fmtDate(h.most_recent_report_date) || dash}</span>
                     </div>
                     <div class="compare-row">
                         <span class="compare-row-label">Parking</span>

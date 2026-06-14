@@ -16,17 +16,16 @@ from google.cloud import storage
 _PACIFIC_TZ = ZoneInfo("America/Los_Angeles")
 
 
-def _format_pacific(iso_utc: str | None) -> str | None:
-    """Convert an ISO-8601 UTC timestamp ('2026-05-04T09:19:06Z') to '05-04-2026 2:19am PDT'."""
-    if not iso_utc:
+def _format_pacific(dt: datetime | None) -> str | None:
+    """Convert a UTC datetime to '05-17-2026 9:04am PDT'. Returns None on bad input."""
+    if dt is None:
         return None
     try:
-        dt = datetime.fromisoformat(iso_utc.replace("Z", "+00:00"))
         local = dt.astimezone(_PACIFIC_TZ)
-        # %-I = non-padded hour (2 not 02). The .lower() on AM/PM matches the requested style.
+        # %-I = non-padded hour (9 not 09). The .lower() on AM/PM matches the requested style.
         return local.strftime("%m-%d-%Y %-I:%M%p %Z").replace("AM", "am").replace("PM", "pm")
     except Exception:
-        return iso_utc  # fall back to raw if parsing fails
+        return None
 
 # Validators for scraped stat fields. The WTA scraper sometimes grabs paragraph
 # text instead of the structured stat — we drop anything that doesn't look like
@@ -56,8 +55,6 @@ def _clean_stat(value, pattern: re.Pattern) -> str | None:
 # Bucket / prefix constants (mirrors classification/config.py)
 _BUCKET_OUTPUT  = "hikes-model-output"
 _PRED_PREFIX    = "predictions"
-_BUCKET_WEATHER = "weather-conditions"
-_WEATHER_PREFIX = "weather-scraped"
 _BUCKET_RAW     = "wta-hikes"
 _RAW_PREFIX     = "output/hikes"
 
@@ -83,14 +80,29 @@ def load_latest_predictions(client: storage.Client, date: str | None = None) -> 
     """
     Load predictions from GCS.
     If `date` is given, only that date folder is read.
-    Otherwise all date folders are merged in chronological order so each hike
-    ends up with its most recent prediction (daily runs are incremental).
+    Otherwise prefers the consolidated `predictions/latest.json` snapshot
+    written by the classifier; falls back to merging per-date folders if the
+    snapshot doesn't exist yet (first deploy / older buckets).
     """
     bucket = client.bucket(_BUCKET_OUTPUT)
 
     # Only merge runs from when the classification pipeline was finalized (2026-05-01).
     # Earlier daily runs had incomplete data and should be ignored.
     MIN_DATE = "2026-05-01"
+
+    if date is None:
+        # Fast path: single-blob snapshot the classifier rewrites after each run.
+        snapshot = bucket.blob(f"{_PRED_PREFIX}/latest.json")
+        try:
+            text = snapshot.download_as_text()
+            snapshot.reload()  # populate .updated for prediction_written_at
+            predictions = json.loads(text)
+            stamp = snapshot.updated
+            for p in predictions:
+                p["prediction_written_at"] = stamp
+            return _finalize_predictions(client, predictions)
+        except Exception:
+            pass  # fall through to per-date merge
 
     if date:
         date_prefixes = [f"{_PRED_PREFIX}/{date}/"]
@@ -112,9 +124,11 @@ def load_latest_predictions(client: storage.Client, date: str | None = None) -> 
     def _download(item):
         prefix, blob = item
         try:
-            return prefix, json.loads(blob.download_as_text())
+            text = blob.download_as_text()
         except Exception:
-            return prefix, None
+            return prefix, None, None
+        # blob.updated is populated when the blob was fetched via list_blobs above
+        return prefix, json.loads(text), blob.updated
 
     # Parallel downloads, then merge in date-prefix order so newer overwrites
     seen: dict[str, dict] = {}
@@ -123,13 +137,20 @@ def load_latest_predictions(client: storage.Client, date: str | None = None) -> 
 
     # Sort by prefix (= date) ascending so newer dates overwrite older
     results.sort(key=lambda r: r[0])
-    for _prefix, data in results:
+    for prefix, data, updated in results:
         if isinstance(data, list):
             for p in data:
                 if p.get("hike_id"):
+                    # Exact write time of the prediction blob — used to label the
+                    # weather snapshot on the hike page with a precise local timestamp.
+                    p["prediction_written_at"] = updated
                     seen[p["hike_id"]] = p
 
-    predictions = list(seen.values())
+    return _finalize_predictions(client, list(seen.values()))
+
+
+def _finalize_predictions(client: storage.Client, predictions: list[dict]) -> list[dict]:
+    """Enrich, sanitize, and apply the closure-override pass shared by both load paths."""
     _enrich_coordinates(client, predictions)
 
     # Sanitize scraped stat fields — drop anything that doesn't look like a real
@@ -217,8 +238,36 @@ def get_hike(hike_id: str, all_predictions: list[dict], client: storage.Client) 
         return None
 
     hike = dict(hike)  # don't mutate the cache
-    hike["weather"] = _fetch_weather_summary(client, hike_id)
+    # Surface the weather snapshot bundled into the prediction blob at
+    # classification time, so the displayed values always match the
+    # label_explanation. Live re-fetching from GCS drifts as soon as the
+    # weather scraper writes a newer file between classification runs.
+    desc = hike.get("weather_description")
+    hike["weather"] = {
+        "temp_f":            hike.get("current_temp_f"),
+        "aqi":               hike.get("current_aqi"),
+        "snow_depth_in":     hike.get("current_snow_depth_in"),
+        "wind_gusts_mph":    hike.get("max_wind_gusts_mph"),
+        "precip_chance_pct": hike.get("precip_chance_pct"),
+        "description":       desc.capitalize() if desc else None,
+        # Exact moment the prediction blob was written, so the timestamp lines
+        # up with the weather snapshot the LLM saw — not whatever the live
+        # scraper last wrote.
+        "fetched_at":        _format_pacific(hike.get("prediction_written_at")),
+    }
     hike["label_color"] = LABEL_COLORS.get(hike.get("predicted_label", ""), "#888888")
+
+    # Flatten the most recent trip report's road/snow/bugs fields onto the hike
+    # dict so the template (hike.html) can reference hike.road_conditions etc.
+    # without iterating into reports[]. Reports are ordered most-recent first
+    # by the scraper.
+    reports = hike.get("reports") or []
+    if reports:
+        latest = reports[0] or {}
+        for field in ("road_conditions", "snow", "bugs"):
+            if not hike.get(field) and latest.get(field):
+                hike[field] = latest[field]
+
     return hike
 
 
@@ -290,60 +339,3 @@ def _to_float(val) -> float | None:
     except (TypeError, ValueError):
         return None
 
-_WMO_CODES = {
-    0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
-    45: "Fog", 51: "Light drizzle", 53: "Moderate drizzle", 55: "Dense drizzle",
-    61: "Light rain", 63: "Moderate rain", 65: "Heavy rain",
-    71: "Light snow", 73: "Moderate snow", 75: "Heavy snow",
-    80: "Rain showers", 81: "Moderate rain showers", 82: "Violent rain showers",
-    85: "Snow showers", 95: "Thunderstorm",
-}
-
-
-def _fetch_weather_summary(client: storage.Client, hike_id: str) -> dict:
-    """Fetch and parse weather JSON for a hike. Returns empty dict on miss."""
-    bucket = client.bucket(_BUCKET_WEATHER)
-    blobs = bucket.list_blobs(prefix=f"{_WEATHER_PREFIX}/", delimiter="/")
-    list(blobs)
-    date_prefixes = sorted(blobs.prefixes, reverse=True)
-    if not date_prefixes:
-        return {}
-
-    weather_date = date_prefixes[0].rstrip("/").split("/")[-1]
-    blob = bucket.blob(f"{_WEATHER_PREFIX}/{weather_date}/{hike_id}/open_meteo_24h.json")
-    if not blob.exists():
-        return {}
-
-    raw = json.loads(blob.download_as_text())
-    return _parse_weather(raw)
-
-
-def _parse_weather(raw: dict) -> dict:
-    out = {
-        "temp_f": None,
-        "aqi": None,
-        "snow_depth_in": None,
-        "wind_gusts_mph": None,
-        "precip_chance_pct": None,
-        "description": None,
-        "fetched_at": _format_pacific(raw.get("fetched_at_utc")),
-    }
-    hourly = raw.get("hourly_forecast") or []
-    if hourly:
-        h = hourly[0]
-        out["temp_f"] = _to_float(h.get("apparent_temperature"))
-        out["aqi"] = _to_float(h.get("us_aqi"))
-        snow_m = _to_float(h.get("snow_depth"))
-        if snow_m is not None:
-            out["snow_depth_in"] = round(snow_m * 39.37, 1)
-
-    daily = raw.get("daily_summary") or {}
-    gusts_kmh = _to_float(daily.get("wind_gusts_10m_max"))
-    if gusts_kmh is not None:
-        out["wind_gusts_mph"] = round(gusts_kmh * 0.6214, 1)
-    out["precip_chance_pct"] = _to_float(daily.get("precipitation_probability_max"))
-    code = daily.get("weather_code")
-    if code is not None:
-        out["description"] = _WMO_CODES.get(int(float(code)), f"Code {code}")
-
-    return out

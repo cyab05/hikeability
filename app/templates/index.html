@@ -492,6 +492,34 @@
     }
     #filter-popover .cond-filters .cond-btn { padding: 8px 4px; font-size: 11px; }
     #filter-popover .recent-toggle { padding-top: 4px; }
+
+    /* Parking-pass picker (mirrors trails.html dropdown) */
+    #fp-pass-picker { position: relative; }
+    #fp-pass-picker .rp-dropdown { min-width: 220px; }
+    #fp-pass-picker .rp-trigger.has-active { background: #f5f0e8; border-color: #4a6b8a; }
+    .fp-pass-item .diff-check {
+        color: #4a6b8a;
+        font-weight: 700;
+        opacity: 0;
+        transition: opacity 0.1s;
+    }
+    .fp-pass-item.selected .diff-check { opacity: 1; }
+    .fp-pass-item.selected { background: #f5f0e8; }
+    /* "only" hover link inside fp-pass-item */
+    .fp-pass-item .rp-item-right { display: inline-flex; align-items: center; gap: 8px; }
+    .fp-pass-item .only-btn {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #888;
+        opacity: 0;
+        transition: opacity 0.12s, color 0.12s;
+        padding: 2px 4px;
+        border-radius: 4px;
+    }
+    .fp-pass-item:hover .only-btn { opacity: 1; }
+    .fp-pass-item .only-btn:hover { color: #4a6b8a; background: #fff; }
     #fp-reset-btn {
         margin-top: 4px;
         padding: 9px 12px;
@@ -844,6 +872,36 @@
                 <div class="rp-dropdown" id="fp-rp-dropdown"></div>
             </div>
         </div>
+        <div>
+            <div class="fp-section-label">Parking Pass</div>
+            <div class="diff-picker" id="fp-pass-picker">
+                <div class="rp-trigger" id="fp-pass-trigger">
+                    <span class="pass-label">Any</span><span>▾</span>
+                </div>
+                <div class="rp-dropdown" id="fp-pass-dropdown">
+                    <div class="rp-item fp-pass-item" data-pass="none">
+                        <span>No pass required</span>
+                        <span class="rp-item-right"><span class="only-btn">only</span><span class="diff-check">✓</span></span>
+                    </div>
+                    <div class="rp-item fp-pass-item" data-pass="nw-forest">
+                        <span>Northwest Forest Pass</span>
+                        <span class="rp-item-right"><span class="only-btn">only</span><span class="diff-check">✓</span></span>
+                    </div>
+                    <div class="rp-item fp-pass-item" data-pass="discover">
+                        <span>Discover Pass</span>
+                        <span class="rp-item-right"><span class="only-btn">only</span><span class="diff-check">✓</span></span>
+                    </div>
+                    <div class="rp-item fp-pass-item" data-pass="national">
+                        <span>National Park Pass</span>
+                        <span class="rp-item-right"><span class="only-btn">only</span><span class="diff-check">✓</span></span>
+                    </div>
+                    <div class="rp-item fp-pass-item" data-pass="sno-park">
+                        <span>Sno-Parks Permit</span>
+                        <span class="rp-item-right"><span class="only-btn">only</span><span class="diff-check">✓</span></span>
+                    </div>
+                </div>
+            </div>
+        </div>
         <div class="range-block" id="fp-range-distance">
             <div class="range-label">
                 <span>Distance</span>
@@ -940,6 +998,22 @@ map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 let allFeatures = [];
 const activeConditions = new Set(['hikeable', 'modest', 'unhikeable']);
 const activeDifficulties = new Set(['easy', 'moderate', 'hard']);
+const PASS_VALUES = {
+    'none':       null,                       // null = no pass required
+    'nw-forest':  'Northwest Forest Pass',
+    'discover':   'Discover Pass',
+    'national':   'National Park Pass',
+    'sno-park':   'Sno-Parks Permit',
+};
+const PASS_LABELS = {
+    'none':       'No pass',
+    'nw-forest':  'NW Forest',
+    'discover':   'Discover',
+    'national':   'National Park',
+    'sno-park':   'Sno-Parks',
+};
+const PASS_ALL = Object.keys(PASS_VALUES);
+const activePasses = new Set(PASS_ALL);
 let activeRegion = '';
 let recentOnly = false;
 let distRange = [0, 50];      // miles  [min, max]
@@ -977,6 +1051,14 @@ function difficultyMatches(p) {
     if (activeDifficulties.has('hard')     && d.includes('hard'))     return true;
     return false;
 }
+function passMatches(p) {
+    if (activePasses.size === PASS_ALL.length) return true;
+    const trailPass = p.parking_pass_name || null;
+    for (const slug of activePasses) {
+        if (PASS_VALUES[slug] === trailPass) return true;
+    }
+    return false;
+}
 function elevInRange(p) {
     if (elevRange[0] === ELEV_BOUNDS[0] && elevRange[1] === ELEV_BOUNDS[1]) return true;
     const v = parseFeet(p.elevation_gain);
@@ -1001,6 +1083,7 @@ function filteredGeoJSON() {
             if (!distInRange(p)) return false;
             if (!elevInRange(p)) return false;
             if (!difficultyMatches(p)) return false;
+            if (!passMatches(p)) return false;
             return true;
         }),
     };
@@ -1224,6 +1307,10 @@ map.on('load', () => {
         renderTable();
         renderStats();
         renderTrailsRail();
+        // Wire global nav-trails-link hrefs from the start, even before the
+        // user touches a filter. Ensures clicking "Trails" in the top nav
+        // carries any pre-existing state.
+        if (typeof updateTrailsLink === 'function') updateTrailsLink();
     });
 });
 
@@ -1237,6 +1324,7 @@ function filteredFeatures() {
         if (!distInRange(p)) return false;
         if (!elevInRange(p)) return false;
         if (!difficultyMatches(p)) return false;
+        if (!passMatches(p)) return false;
         return true;
     });
 }
@@ -1323,6 +1411,7 @@ function renderTrailsRail() {
         const anyActive = (
             activeConditions.size !== 3 ||
             activeDifficulties.size !== 3 ||
+            activePasses.size !== PASS_ALL.length ||
             activeRegion ||
             recentOnly ||
             distRange[0] !== DIST_BOUNDS[0] || distRange[1] !== DIST_BOUNDS[1] ||
@@ -1373,6 +1462,7 @@ function maybeAutoToggleRail() {
     const anyActive = (
         activeConditions.size !== 3 ||
         activeDifficulties.size !== 3 ||
+        activePasses.size !== PASS_ALL.length ||
         activeRegion ||
         recentOnly ||
         distRange[0] !== DIST_BOUNDS[0] || distRange[1] !== DIST_BOUNDS[1] ||
@@ -1406,7 +1496,11 @@ function renderStats() {
 }
 
 // ── Condition toggles ─────────────────────────────────────────────────────────
-document.querySelectorAll('.cond-btn').forEach(btn => {
+// Note the [data-label] selector — difficulty buttons in the popover ALSO have
+// the .cond-btn class for shared styling, but they carry data-diff (not data-label).
+// Without the attribute filter this handler would pollute activeConditions with
+// `undefined` whenever the user toggles a difficulty.
+document.querySelectorAll('.cond-btn[data-label]').forEach(btn => {
     btn.addEventListener('click', () => {
         const label = btn.dataset.label;
         if (activeConditions.has(label)) {
@@ -1490,16 +1584,72 @@ document.querySelectorAll('.diff-btn').forEach(btn => {
     });
 });
 
+// Popover parking-pass multi-select dropdown
+(function setupFpPassPicker() {
+    const trigger  = document.getElementById('fp-pass-trigger');
+    const dropdown = document.getElementById('fp-pass-dropdown');
+    const label    = trigger.querySelector('.pass-label');
+
+    function syncUI() {
+        const all = activePasses.size === PASS_ALL.length;
+        const n   = activePasses.size;
+        if (all) {
+            label.textContent = 'Any';
+        } else if (n > 2) {
+            label.textContent = `${n} selected`;
+        } else {
+            const ordered = PASS_ALL.filter(p => activePasses.has(p));
+            label.textContent = ordered.map(p => PASS_LABELS[p]).join(', ');
+        }
+        trigger.classList.toggle('has-active', !all);
+        dropdown.querySelectorAll('.fp-pass-item').forEach(item => {
+            item.classList.toggle('selected', activePasses.has(item.dataset.pass));
+        });
+    }
+
+    trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dropdown.classList.toggle('open');
+    });
+    document.addEventListener('click', () => dropdown.classList.remove('open'));
+    dropdown.addEventListener('click', (e) => e.stopPropagation());
+
+    dropdown.querySelectorAll('.fp-pass-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            const p = item.dataset.pass;
+            if (e.target.classList.contains('only-btn')) {
+                e.stopPropagation();
+                activePasses.clear();
+                activePasses.add(p);
+            } else if (activePasses.has(p)) {
+                if (activePasses.size === 1) return;
+                activePasses.delete(p);
+            } else {
+                activePasses.add(p);
+            }
+            syncUI();
+            applyFilters();
+        });
+    });
+
+    // Expose so applyFilters can re-sync after reset
+    window._fpPassSyncUI = syncUI;
+    syncUI();
+})();
+
 // Popover "Reset all filters" — restore every filter to default
 document.getElementById('fp-reset-btn').addEventListener('click', () => {
     activeConditions.clear();
     ['hikeable', 'modest', 'unhikeable'].forEach(l => activeConditions.add(l));
     activeDifficulties.clear();
     ['easy', 'moderate', 'hard'].forEach(d => activeDifficulties.add(d));
+    activePasses.clear();
+    PASS_ALL.forEach(p => activePasses.add(p));
     activeRegion = '';
     recentOnly = false;
     distRange = [DIST_BOUNDS[0], DIST_BOUNDS[1]];
     elevRange = [ELEV_BOUNDS[0], ELEV_BOUNDS[1]];
+    if (window._fpPassSyncUI) window._fpPassSyncUI();
     applyFilters();  // wraps syncFilterUIs() + updateFilterCount() automatically
 });
 
@@ -1548,6 +1698,7 @@ function updateFilterCount() {
     let n = 0;
     if (activeConditions.size !== 3) n++;
     if (activeDifficulties.size !== 3) n++;
+    if (activePasses.size !== PASS_ALL.length) n++;
     if (activeRegion) n++;
     if (recentOnly) n++;
     if (distRange[0] !== DIST_BOUNDS[0] || distRange[1] !== DIST_BOUNDS[1]) n++;
@@ -1564,8 +1715,26 @@ function buildTrailsLink() {
     const params = new URLSearchParams();
     const labels = [...activeConditions];
     if (labels.length !== 3) params.set('labels', labels.join(','));
-    const diffs = [...activeDifficulties];
-    if (diffs.length !== 3) params.set('difficulty', diffs.join(','));
+    // Map uses 3 difficulty buckets (easy/moderate/hard) but the trails page has
+    // 5 slugs including the slash-variants. Expand each bucket to the variants
+    // it should match so e.g. "easy + moderate" becomes easy, easy-moderate,
+    // moderate, moderate-hard on the trails page.
+    if (activeDifficulties.size !== 3) {
+        // easy "owns" easy-moderate, hard "owns" moderate-hard, moderate is solo.
+        // So easy+moderate → easy, easy/moderate, moderate (no moderate/hard,
+        // since hard isn't selected); moderate+hard → moderate, moderate/hard,
+        // hard; hard alone → moderate/hard, hard.
+        const DIFF_EXPAND = {
+            easy:     ['easy', 'easy-moderate'],
+            moderate: ['moderate'],
+            hard:     ['moderate-hard', 'hard'],
+        };
+        const expanded = new Set();
+        activeDifficulties.forEach(b => (DIFF_EXPAND[b] || []).forEach(s => expanded.add(s)));
+        params.set('difficulty', [...expanded].join(','));
+    }
+    const passes = [...activePasses];
+    if (passes.length !== PASS_ALL.length) params.set('pass', passes.join(','));
     if (activeRegion) params.set('region', activeRegion);
     if (recentOnly) params.set('recent', '1');
     if (distRange[0] !== DIST_BOUNDS[0]) params.set('distMin', String(distRange[0]));
@@ -1576,14 +1745,20 @@ function buildTrailsLink() {
     return qs ? `/trails?${qs}` : '/trails';
 }
 function updateTrailsLink() {
+    const url = buildTrailsLink();
+    // Also propagate the filter state to the global nav links (top header +
+    // hamburger sidebar) so clicking "Trails" anywhere carries current filters.
+    document.querySelectorAll('.nav-trails-link').forEach(el => { el.href = url; });
+
     const a = document.getElementById('sb-trails-link');
     if (!a) return;
-    a.href = buildTrailsLink();
+    a.href = url;
     // Reflect the active filter count: "View all trails" when nothing is filtered,
     // "View N trails" otherwise. Count uses the same filteredFeatures() the map sees.
     const anyFilterActive =
         activeConditions.size !== 3 ||
         activeDifficulties.size !== 3 ||
+        activePasses.size !== PASS_ALL.length ||
         activeRegion ||
         recentOnly ||
         distRange[0] !== DIST_BOUNDS[0] || distRange[1] !== DIST_BOUNDS[1] ||

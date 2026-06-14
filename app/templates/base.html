@@ -192,7 +192,7 @@
     <a href="/"><h1>hikeability</h1></a>
     <nav>
         <a href="/" class="{{ 'active' if request.path == '/' }}">Map</a>
-        <a href="/trails" class="{{ 'active' if request.path == '/trails' }}">Trails</a>
+        <a href="/trails" class="nav-trails-link {{ 'active' if request.path == '/trails' }}">Trails</a>
         <a href="/saved" class="{{ 'active' if request.path == '/saved' }}">Saved</a>
         <a href="/stats" class="{{ 'active' if request.path == '/stats' }}">Stats</a>
         <a href="/about" class="{{ 'active' if request.path == '/about' }}">About</a>
@@ -209,7 +209,7 @@
     </div>
     <nav class="gsb-nav">
         <a href="/" class="{{ 'active' if request.path == '/' }}">MAP</a>
-        <a href="/trails" class="{{ 'active' if request.path == '/trails' }}">TRAILS</a>
+        <a href="/trails" class="nav-trails-link {{ 'active' if request.path == '/trails' }}">TRAILS</a>
         <a href="/saved" class="{{ 'active' if request.path == '/saved' }}">SAVED <span id="saved-count" style="opacity:0.6;font-weight:500;"></span></a>
         <a href="/stats" class="{{ 'active' if request.path == '/stats' }}">STATS</a>
         <a href="/about" class="{{ 'active' if request.path == '/about' }}">ABOUT</a>

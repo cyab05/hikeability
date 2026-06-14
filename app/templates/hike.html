@@ -239,6 +239,8 @@
 
     {% if request.args.get('from') == 'saved' %}
     <a class="back-link" href="/saved">← Back to Saved</a>
+    {% elif request.args.get('from') == 'trails' %}
+    <a class="back-link" href="/trails{% if request.args.get('trailsQs') %}?{{ request.args.get('trailsQs') }}{% endif %}">← Back to All Trails</a>
     {% else %}
     <a class="back-link" href="/">← Back to map</a>
     {% endif %}
@@ -280,7 +282,8 @@
             <span>📏 {{ hike.distance }}</span>
             {% endif %}
             {% if hike.most_recent_report_date %}
-            <span>Last report: {{ hike.most_recent_report_date }}</span>
+            {% set _d = hike.most_recent_report_date.split('-') %}
+            <span>Last report: {{ _d[1]|int }}/{{ _d[2]|int }}/{{ _d[0] }}</span>
             {% endif %}
         </div>
     </div>
@@ -290,36 +293,6 @@
         <h3>Conditions Summary</h3>
         <p class="explanation">{{ hike.label_explanation or hike.explanation or "No explanation available." }}</p>
     </div>
-
-    <!-- Report conditions -->
-    {% if hike.road_conditions or hike.snow or hike.bugs %}
-    <div class="card">
-        <h3>Trail Report Conditions</h3>
-        <div class="stats-grid">
-            {% if hike.road_conditions %}
-            <div class="stat">
-                <span class="stat-label">Road</span>
-                <span class="stat-value" style="font-size:15px;">{{ hike.road_conditions }}</span>
-            </div>
-            {% endif %}
-            {% if hike.snow %}
-            <div class="stat">
-                <span class="stat-label">Snow</span>
-                <span class="stat-value" style="font-size:15px;">{{ hike.snow }}</span>
-            </div>
-            {% endif %}
-            {% if hike.bugs %}
-            <div class="stat">
-                <span class="stat-label">Bugs</span>
-                <span class="stat-value" style="font-size:15px;">{{ hike.bugs }}</span>
-            </div>
-            {% endif %}
-        </div>
-        {% if hike.most_recent_report_date %}
-        <p style="font-size:12px;color:#aaa;margin-top:14px;">From WTA report: {{ hike.most_recent_report_date }}</p>
-        {% endif %}
-    </div>
-    {% endif %}
 
     <!-- Trail stats -->
     <div class="card">
@@ -385,7 +358,7 @@
 
     <!-- Weather -->
     <div class="card">
-        <h3>Current Weather at Trailhead</h3>
+        <h3>Weather at Trailhead</h3>
         {% set w = hike.weather %}
         {% if w and (w.temp_f is not none or w.description) %}
         <div class="weather-grid">

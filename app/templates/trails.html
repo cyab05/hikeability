@@ -24,6 +24,125 @@
     }
     #trail-count { font-size: 13px; color: #999; }
 
+    /* Page-header right side — count + view toggle grouped together */
+    .page-header-right {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+
+    /* View-mode toggle (table vs grid) */
+    .view-toggle {
+        display: inline-flex;
+        background: #fff;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 2px;
+    }
+    .view-toggle button {
+        background: none;
+        border: none;
+        padding: 6px 10px;
+        cursor: pointer;
+        color: #888;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.15s, color 0.15s;
+    }
+    .view-toggle button:hover { color: #373d44; }
+    .view-toggle button.active { background: #f0ebe0; color: #373d44; }
+    .view-toggle svg { width: 16px; height: 16px; }
+
+    /* Grid view (mirrors the saved-page card style) */
+    .trails-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 16px;
+    }
+    .trail-card {
+        background: #fff;
+        border-radius: 12px;
+        /* No overflow:hidden — needed so the alert tooltip can escape the card.
+           Top image is rounded independently; bottom corners are clipped by
+           the same white card background, so visually nothing leaks. */
+        box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+        cursor: pointer;
+        transition: transform 0.15s, box-shadow 0.15s;
+        display: flex;
+        flex-direction: column;
+    }
+    .trail-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+        z-index: 10;   /* lift above sibling cards so tooltips aren't covered */
+    }
+    .trail-card-img {
+        width: 100%;
+        height: 150px;
+        object-fit: cover;
+        background: #ece2d0;
+        display: block;
+        border-radius: 12px 12px 0 0;     /* round only the top, match the card */
+    }
+    /* Heart pinned on the card's thumbnail (same affordance as the map hover popup) */
+    .trail-card { position: relative; }
+    .trail-card-bookmark {
+        position: absolute;
+        top: 8px; right: 8px;
+        width: 32px; height: 32px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(4px);
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        color: #888;
+        transition: color 0.15s, transform 0.1s, background 0.15s;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+        z-index: 2;
+    }
+    .trail-card-bookmark:hover { color: #DC4848; transform: scale(1.1); background: #fff; }
+    .trail-card-bookmark.saved { color: #DC4848; }
+    .trail-card-bookmark svg { width: 16px; height: 16px; }
+    .trail-card-body {
+        padding: 14px 16px 16px;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+    .trail-card-name {
+        font-family: Georgia, serif;
+        font-size: 15px;
+        font-weight: 700;
+        color: #373d44;
+        line-height: 1.25;
+        margin-bottom: 2px;
+    }
+    .trail-card-meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: #888;
+    }
+    .trail-card-meta .badge { font-size: 10px; padding: 3px 9px; }
+    .empty-grid {
+        grid-column: 1 / -1;
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+        padding: 48px 24px;
+        text-align: center;
+        color: #aaa;
+        font-size: 14px;
+    }
+
     /* Filters */
     .filters {
         display: flex;
@@ -128,14 +247,13 @@
         position: relative;     /* anchor for the custom tooltip below */
     }
     /* Custom hover tooltip — instant, dark-pill style. Replaces the native
-       browser title tooltip which has a hardcoded ~2s delay.
-       Anchored on the LEFT (not centered) because the badge sits in the
-       leftmost table column — centering would clip the tooltip off-screen. */
+       browser title tooltip which has a hardcoded ~2s delay. */
     .alert-badge[data-tooltip]:hover::after {
         content: attr(data-tooltip);
         position: absolute;
         bottom: calc(100% + 8px);
-        left: -4px;                 /* slight overhang so arrow lines up nicely */
+        left: 50%;                  /* center horizontally over the ⚠ icon */
+        transform: translateX(-50%);
         white-space: pre-wrap;      /* render \n in warnings_text as line breaks */
         background: #373d44;
         color: #fff;
@@ -319,9 +437,14 @@
         background: #fff;
         border-radius: 12px;
         box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-        overflow: hidden;
+        /* overflow visible so alert tooltips can escape the table on the
+           first row / leftmost column. Round the header cells directly to
+           keep the wrapper's curved corners. */
+        overflow: visible;
     }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th:first-child { border-top-left-radius: 12px; }
+    thead th:last-child  { border-top-right-radius: 12px; }
     thead th {
         background: #f0ebe0;
         padding: 12px 16px;
@@ -364,7 +487,28 @@
 <div class="trails-page">
     <div class="page-header">
         <h2>All Trails</h2>
-        <span id="trail-count"></span>
+        <div class="page-header-right">
+            <span id="trail-count"></span>
+            <div class="view-toggle" role="tablist" aria-label="View mode">
+                <button type="button" data-view="table" aria-label="Table view" title="Table view">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="3" y1="6"  x2="21" y2="6"/>
+                        <line x1="3" y1="12" x2="21" y2="12"/>
+                        <line x1="3" y1="18" x2="21" y2="18"/>
+                    </svg>
+                </button>
+                <button type="button" data-view="grid" aria-label="Grid view" title="Grid view">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3"  y="3"  width="7" height="7"/>
+                        <rect x="14" y="3"  width="7" height="7"/>
+                        <rect x="3"  y="14" width="7" height="7"/>
+                        <rect x="14" y="14" width="7" height="7"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
     </div>
 
     <!-- Row 1: Search + condition pills -->
@@ -507,7 +651,7 @@
         </div>
     </div>
 
-    <div class="table-wrap">
+    <div class="table-wrap" id="table-view">
         <table>
             <thead>
                 <tr>
@@ -521,6 +665,11 @@
             </thead>
             <tbody id="tbody"></tbody>
         </table>
+    </div>
+
+    <!-- Grid view (hidden by default; toggled from the view-toggle in the header) -->
+    <div id="grid-view" style="display:none;">
+        <div class="trails-grid" id="trails-grid"></div>
     </div>
 </div>
 
@@ -870,6 +1019,9 @@ function filtered() {
     );
 }
 
+// View mode persists across page loads
+let viewMode = localStorage.getItem('trails-view') === 'grid' ? 'grid' : 'table';
+
 function render() {
     const rows = filtered().sort((a, b) => {
         let va = a[sortCol] ?? '', vb = b[sortCol] ?? '';
@@ -881,7 +1033,85 @@ function render() {
     });
 
     document.getElementById('trail-count').textContent = `${rows.length} trail${rows.length !== 1 ? 's' : ''}`;
+    document.getElementById('table-view').style.display = (viewMode === 'table') ? '' : 'none';
+    document.getElementById('grid-view').style.display  = (viewMode === 'grid')  ? '' : 'none';
 
+    if (viewMode === 'grid') renderGrid(rows);
+    else                     renderTable(rows);
+}
+
+// Trail-detail link with ?from=trails and the current page's filters preserved,
+// so the back-link on the detail page returns to the same filtered view.
+function trailDetailHref(hikeId) {
+    const qs = window.location.search.replace(/^\?/, '');
+    const params = new URLSearchParams();
+    params.set('from', 'trails');
+    if (qs) params.set('trailsQs', qs);
+    return `/hike/${hikeId}?${params.toString()}`;
+}
+
+function renderGrid(rows) {
+    const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+    const grid = document.getElementById('trails-grid');
+    if (!rows.length) {
+        grid.innerHTML = '<div class="empty-grid">No trails match your filters.</div>';
+        return;
+    }
+    grid.innerHTML = rows.map(h => {
+        // Alert badge — same logic as the table cell, simplified for the card
+        let alertBadge = '';
+        if (h.has_alert) {
+            const isRed = h.is_closed;
+            const color = isRed ? '#DC4848' : '#F7A745';
+            const tip = (h.warnings_text || h.warning_short || (isRed ? 'Trail closure' : 'Trail warning'))
+                .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            alertBadge = ` <span class="alert-badge" style="color:${color};font-size:14px;" data-tooltip="${tip}" aria-label="${tip}">⚠</span>`;
+        }
+        const isSaved = Bookmarks.has(h.hike_id);
+        return `
+            <div class="trail-card" data-href="${trailDetailHref(h.hike_id)}">
+                <button class="trail-card-bookmark ${isSaved ? 'saved' : ''}" data-id="${h.hike_id}"
+                        aria-label="${isSaved ? 'Unsave' : 'Save'} trail" title="Save trail">
+                    ${Bookmarks.heartSVG(isSaved)}
+                </button>
+                ${h.image_url
+                    ? `<img class="trail-card-img" src="${h.image_url}" loading="lazy" onerror="this.remove()">`
+                    : '<div class="trail-card-img"></div>'}
+                <div class="trail-card-body">
+                    <div class="trail-card-name">${h.name}${alertBadge}</div>
+                    <div class="trail-card-meta">
+                        <span class="badge badge-${h.label}">${cap(h.label)}</span>
+                        ${h.difficulty ? `<span class="td-diff">${h.difficulty}</span>` : ''}
+                    </div>
+                    ${h.region ? `<div class="trail-card-meta">📍 ${h.region}</div>` : ''}
+                    <div class="trail-card-meta">
+                        ${h.distance ? `<span>📏 ${h.distance}</span>` : ''}
+                        ${h.elevation_gain ? `<span>⛰ ${h.elevation_gain}</span>` : ''}
+                    </div>
+                </div>
+            </div>`;
+    }).join('');
+    grid.querySelectorAll('.trail-card').forEach(card => {
+        card.addEventListener('click', (e) => {
+            // Ignore clicks on the heart so it doesn't navigate
+            if (e.target.closest('.trail-card-bookmark')) return;
+            window.location = card.dataset.href;
+        });
+    });
+    // Heart toggle on each card
+    grid.querySelectorAll('.trail-card-bookmark').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const nowSaved = Bookmarks.toggle(btn.dataset.id);
+            btn.classList.toggle('saved', nowSaved);
+            btn.innerHTML = Bookmarks.heartSVG(nowSaved);
+            btn.setAttribute('aria-label', nowSaved ? 'Unsave trail' : 'Save trail');
+        });
+    });
+}
+
+function renderTable(rows) {
     const tbody = document.getElementById('tbody');
     if (!rows.length) {
         tbody.innerHTML = '<tr><td colspan="6" class="no-results">No trails match your filters.</td></tr>';
@@ -907,7 +1137,7 @@ function render() {
                 .replace(/>/g, '&gt;');
             alertBadge = ` <span class="alert-badge" style="color:${color}" data-tooltip="${tip}" aria-label="${tip}">⚠</span>`;
         }
-        return `<tr onclick="window.location='/hike/${h.hike_id}'">
+        return `<tr data-href="${trailDetailHref(h.hike_id)}" onclick="window.location=this.dataset.href">
             <td class="td-name">${h.name}${alertBadge}</td>
             <td><span class="badge badge-${h.label}" style="font-size:12px;">${cap}</span></td>
             <td class="td-region">${h.region || '—'}</td>
@@ -991,6 +1221,20 @@ function buildRegionPicker(triggerId, dropdownId, regions, onChange) {
     });
 }
 document.getElementById('search').addEventListener('input', e => { searchQuery = e.target.value.trim().toLowerCase(); render(); });
+
+// View-mode toggle (Table / Grid)
+document.querySelectorAll('.view-toggle button').forEach(btn => {
+    if (btn.dataset.view === viewMode) btn.classList.add('active');
+    btn.addEventListener('click', () => {
+        if (btn.dataset.view === viewMode) return;
+        viewMode = btn.dataset.view;
+        localStorage.setItem('trails-view', viewMode);
+        document.querySelectorAll('.view-toggle button').forEach(b => {
+            b.classList.toggle('active', b.dataset.view === viewMode);
+        });
+        render();
+    });
+});
 
 // Recent-reports checkbox — sync initial state from URL, then react to changes
 const _recentToggle = document.getElementById('recent-only-toggle');

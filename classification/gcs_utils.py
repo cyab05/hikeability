@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 from google.cloud import storage
@@ -170,6 +171,112 @@ def upload_predictions_to_gcs(
     )
     print(f"Uploaded predictions -> gs://{GCS_BUCKET_OUTPUT}/{blob_path}")
     return f"gs://{GCS_BUCKET_OUTPUT}/{blob_path}"
+
+
+# Earliest daily-run date the snapshot includes. Mirrors MIN_DATE in app/gcs.py —
+# runs before this had incomplete coverage.
+_SNAPSHOT_MIN_DATE = "2026-05-01"
+_SNAPSHOT_PATH = f"{GCS_PRED_PREFIX}/latest.json"
+
+
+def write_latest_snapshot(client: storage.Client) -> str:
+    """
+    Merge every daily prediction folder (>= _SNAPSHOT_MIN_DATE) into a single
+    predictions/latest.json blob, enriched with metadata from the raw bucket
+    so the web app can serve cold-start traffic with one GCS read.
+    """
+    output = client.bucket(GCS_BUCKET_OUTPUT)
+
+    # 1. Find date folders to include.
+    blobs = output.list_blobs(prefix=f"{GCS_PRED_PREFIX}/", delimiter="/")
+    list(blobs)  # populate .prefixes
+    date_prefixes = sorted(
+        p for p in blobs.prefixes
+        if p.rstrip("/").split("/")[-1] >= _SNAPSHOT_MIN_DATE
+    )
+    if not date_prefixes:
+        print("No prediction folders to snapshot.")
+        return ""
+
+    # 2. Collect every prediction JSON across all dates.
+    pred_blobs: list[tuple[str, storage.Blob]] = []
+    for prefix in date_prefixes:
+        for blob in output.list_blobs(prefix=prefix):
+            if blob.name.endswith(".json"):
+                pred_blobs.append((prefix, blob))
+
+    def _download(item):
+        prefix, blob = item
+        try:
+            return prefix, json.loads(blob.download_as_text())
+        except Exception:
+            return prefix, None
+
+    with ThreadPoolExecutor(max_workers=32) as ex:
+        results = list(ex.map(_download, pred_blobs))
+
+    # 3. Merge by hike_id, newer date wins.
+    results.sort(key=lambda r: r[0])
+    merged: dict[str, dict] = {}
+    for _prefix, data in results:
+        if isinstance(data, list):
+            for p in data:
+                if p.get("hike_id"):
+                    merged[p["hike_id"]] = p
+
+    predictions = list(merged.values())
+    print(f"Merged {len(predictions)} unique hikes across {len(date_prefixes)} date folders.")
+
+    # 4. Enrich from raw metadata so the web app never has to.
+    raw_bucket = client.bucket(GCS_BUCKET_RAW)
+
+    def _needs_meta(p: dict) -> bool:
+        return not (
+            p.get("latitude") is not None and p.get("longitude") is not None
+            and p.get("distance") and p.get("rating") and p.get("url")
+            and p.get("elevation_gain") and p.get("highest_point") and p.get("hike_name")
+            and p.get("image_url") and p.get("difficulty")
+            and "parking_pass" in p and "closure_warning" in p
+        )
+
+    needs_fetch = [p for p in predictions if _needs_meta(p)]
+
+    def _fetch_meta(p: dict):
+        blob = raw_bucket.blob(f"{GCS_INPUT_PREFIX}/{p['hike_id']}/metadata.json")
+        try:
+            return p, json.loads(blob.download_as_text())
+        except Exception:
+            return p, None
+
+    with ThreadPoolExecutor(max_workers=64) as ex:
+        for p, meta in ex.map(_fetch_meta, needs_fetch):
+            if not meta:
+                continue
+            for src, dst in (
+                ("latitude", "latitude"), ("longitude", "longitude"),
+                ("name", "hike_name"), ("url", "url"),
+                ("elevation_gain", "elevation_gain"), ("highest_point", "highest_point"),
+                ("distance", "distance"), ("rating", "rating"),
+                ("image_url", "image_url"), ("difficulty", "difficulty"),
+            ):
+                if not p.get(dst):
+                    val = meta.get(src)
+                    if val is not None:
+                        p[dst] = val
+            if p.get("parking_pass") is None:
+                p["parking_pass"] = meta.get("parking_pass")
+            if p.get("closure_warning") is None:
+                p["closure_warning"] = meta.get("closure_warning") or []
+
+    # 5. Upload as predictions/latest.json (no indentation to keep payload small).
+    blob = output.blob(_SNAPSHOT_PATH)
+    blob.upload_from_string(
+        json.dumps(predictions, ensure_ascii=False),
+        content_type="application/json",
+    )
+    uri = f"gs://{GCS_BUCKET_OUTPUT}/{_SNAPSHOT_PATH}"
+    print(f"Wrote snapshot -> {uri} ({len(predictions)} hikes)")
+    return uri
 
 
 def get_last_run_timestamp(client: storage.Client) -> datetime | None:
